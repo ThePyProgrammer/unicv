@@ -1,0 +1,17 @@
+[project]
+name = "unicv"
+version = "0.1.0"
+description = "Unified deep learning models for Computer Vision"
+readme = "README.md"
+authors = [
+    { name = "Prannaya Gupta", email = "prannayagupta@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "einops~=0.6.0",
+    "torch~=2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
