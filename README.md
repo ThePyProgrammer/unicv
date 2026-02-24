@@ -116,12 +116,12 @@ result = model(rgb=image_tensor)   # → {Modality.DEPTH: tensor}
 
 These building blocks are prerequisites for multiple catalogue models and should be implemented before the models that depend on them.
 
-- [ ] **Gaussian splat output container** — define a `GaussianCloud` dataclass (or named tensor dict) holding per-Gaussian attributes: positions `(N,3)`, scales `(N,3)`, rotations/quaternions `(N,4)`, opacities `(N,1)`, spherical-harmonic colour coefficients `(N, (deg+1)²×3)`; required by SHARP, DepthSplat, LongSplat, InstantSplat
-- [ ] **Gaussian parameter regression head** (`unicv.nn`) — a `GaussianHead` that maps a dense feature map to valid Gaussian parameters, using log-space scales, normalised quaternions, and sigmoid opacities; shared by SHARP and DepthSplat
-- [ ] **Mesh output container** — define a `TriangleMesh` dataclass holding `vertices (V,3)` and `faces (F,3)`; required by TRELLIS.2, SuGaR, Hunyuan3D-2.1
-- [ ] **Camera projection utilities** (`unicv.nn`) — differentiable `backproject_depth` (depth map → 3D point cloud), `homography_warp` (warp feature map between views given intrinsics/extrinsics); required by SimpleRecon, POMATO, DepthSplat
-- [ ] **Plane-sweep cost volume** (`unicv.nn`) — constructs a `(B, D, H, W)` matching volume by warping source frames to a set of fronto-parallel depth hypotheses using homographies, then computes NCC or learned similarity; required by SimpleRecon and DepthSplat
-- [ ] **3D sparse convolution wrapper** — thin wrapper around a sparse-conv library (e.g. [spconv](https://github.com/traveller59/spconv) or [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine)) for voxel-grid operations; required by TRELLIS.2
+- [x] **Gaussian splat output container** — define a `GaussianCloud` dataclass (or named tensor dict) holding per-Gaussian attributes: positions `(N,3)`, scales `(N,3)`, rotations/quaternions `(N,4)`, opacities `(N,1)`, spherical-harmonic colour coefficients `(N, (deg+1)²×3)`; required by SHARP, DepthSplat, LongSplat, InstantSplat
+- [x] **Gaussian parameter regression head** (`unicv.nn`) — a `GaussianHead` that maps a dense feature map to valid Gaussian parameters, using log-space scales, normalised quaternions, and sigmoid opacities; shared by SHARP and DepthSplat
+- [x] **Mesh output container** — define a `TriangleMesh` dataclass holding `vertices (V,3)` and `faces (F,3)`; required by TRELLIS.2, SuGaR, Hunyuan3D-2.1
+- [x] **Camera projection utilities** (`unicv.nn`) — differentiable `backproject_depth` (depth map → 3D point cloud), `homography_warp` (warp feature map between views given intrinsics/extrinsics); required by SimpleRecon, POMATO, DepthSplat
+- [x] **Plane-sweep cost volume** (`unicv.nn`) — constructs a `(B, D, H, W)` matching volume by warping source frames to a set of fronto-parallel depth hypotheses using homographies, then computes NCC or learned similarity; required by SimpleRecon and DepthSplat
+- [x] **3D sparse convolution wrapper** — thin wrapper around a sparse-conv library (e.g. [spconv](https://github.com/traveller59/spconv) or [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine)) for voxel-grid operations; required by TRELLIS.2
 
 ---
 
