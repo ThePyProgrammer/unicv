@@ -39,23 +39,28 @@ We are actively building out the core modules of **unicv**.
 Here’s the current progress:
 
 - [ ] Set Up the whole library
+- [ ] Implement the [DPT Architecture](https://huggingface.co/docs/transformers/v4.41.0/model_doc/dpt)
+- [ ] Implement the SDT Architecture from [AnyDepth](https://github.com/AIGeeksGroup/AnyDepth)
+- [ ] Implement [DepthPro Model](https://github.com/apple/ml-depth-pro/blob/main/src/depth_pro/depth_pro.py)
+- [ ] Implement [Depth Anything 3 Model](https://github.com/ByteDance-Seed/Depth-Anything-3/blob/main/src/depth_anything_3/model/da3.py)
 
 ### Catalogue of Models
 
-| Name | Input | Sampling | Output |
-| --- | --- | --- | --- |
-| [TRELLIS.2](https://microsoft.github.io/TRELLIS.2/) | RGB | Single | Mesh |
-| [Depth Anything 3 (DA3)](https://depth-anything-3.github.io/) | RGB | Single | Depth |
-| [Camera Depth Model](https://manipulation-as-in-simulation.github.io/#cdm-results) | RGB + Depth | Single | Depth |
-| [Depth Pro](https://github.com/apple/ml-depth-pro) | RGB | Single | Depth |
-| [SHARP](https://apple.github.io/ml-sharp/) | RGB | Single | Splat |
-| [SuGaR](https://anttwo.github.io/sugar/) | RGB | List | Mesh |
-| [POMATO](https://github.com/wyddmw/POMATO) | RGB | Temporal | Point Cloud |
-| [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1) | RGB | Single | Mesh |
-| [LongSplat](https://arxiv.org/abs/2507.16144) | RGB | Temporal | Splat |
-| [SimpleRecon](https://nianticlabs.github.io/simplerecon/) | RGB | Temporal | Depth |
-| [MASt3R-SLAM](https://edexheim.github.io/mast3r-slam/) | RGB | Temporal | Point Cloud |
-| [InstantSplat](https://instantsplat.github.io/) | RGB | Temporal | Splat |
+| Name                                                                               | Input       | Sampling | Output      |
+| ---------------------------------------------------------------------------------- | ----------- | -------- | ----------- |
+| [TRELLIS.2](https://microsoft.github.io/TRELLIS.2/)                                | RGB         | Single   | Mesh        |
+| [Depth Anything 3 (DA3)](https://depth-anything-3.github.io/)                      | RGB         | Single   | Depth       |
+| [Camera Depth Model](https://manipulation-as-in-simulation.github.io/#cdm-results) | RGB + Depth | Single   | Depth       |
+| [Depth Pro](https://github.com/apple/ml-depth-pro)                                 | RGB         | Single   | Depth       |
+| [SHARP](https://apple.github.io/ml-sharp/)                                         | RGB         | Single   | Splat       |
+| [SuGaR](https://anttwo.github.io/sugar/)                                           | RGB         | List     | Mesh        |
+| [POMATO](https://github.com/wyddmw/POMATO)                                         | RGB         | Temporal | Point Cloud |
+| [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1)                  | RGB         | Single   | Mesh        |
+| [LongSplat](https://arxiv.org/abs/2507.16144)                                      | RGB         | Temporal | Splat       |
+| [SimpleRecon](https://nianticlabs.github.io/simplerecon/)                          | RGB         | Temporal | Depth       |
+| [MASt3R-SLAM](https://edexheim.github.io/mast3r-slam/)                             | RGB         | Temporal | Point Cloud |
+| [InstantSplat](https://instantsplat.github.io/)                                    | RGB         | Temporal | Splat       |
+| [DepthSplat](https://haofeixu.github.io/depthsplat/)                               | RGB         | List     | Mesh, Splat |
 
 
 ## 🛠️ Installation and Set-Up
