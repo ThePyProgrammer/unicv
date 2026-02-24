@@ -96,7 +96,7 @@ result = model(rgb=image_tensor)   # → {Modality.DEPTH: tensor}
 | [DepthPro](https://github.com/apple/ml-depth-pro) | `DepthProModel` | RGB → Depth | `DepthProModel.from_pretrained()` |
 | [Depth Anything 3](https://depth-anything-3.github.io/) | `DepthAnything3Model` | RGB → Depth | `DepthAnything3Model.from_pretrained(variant=...)` |
 | [Camera Depth Model](https://manipulation-as-in-simulation.github.io/#cdm-results) | `CameraDepthModel` | RGB + Depth → Depth | `CameraDepthModel.from_pretrained(camera=...)` |
-| [SHARP](https://apple.github.io/ml-sharp/) | `SHARPModel` | RGB → Splat | — |
+| [SHARP](https://apple.github.io/ml-sharp/) | `SHARPModel` | RGB → Splat | `SHARPModel.from_pretrained()` |
 | [SimpleRecon](https://nianticlabs.github.io/simplerecon/) | `SimpleReconModel` | RGB (temporal) → Depth | — |
 
 ---
@@ -293,6 +293,31 @@ model.eval()
 result  = model(rgb=rgb_tensor, depth=raw_depth_tensor)   # both (B, *, H, W)
 refined = result["depth"]                                  # refined depth, (B, 1, H, W)
 ```
+
+---
+
+### SHARP
+
+Downloads the SHARP checkpoint directly from Apple's CDN (no Hugging Face dependency).  No extra dependencies beyond PyTorch.
+
+```python
+from unicv.models.sharp import SHARPModel
+
+model = SHARPModel.from_pretrained()
+model.eval()
+
+result = model(rgb=image_tensor)   # image_tensor: (B, 3, H, W)
+cloud  = result["splat"]           # GaussianCloud with N = H×W Gaussians
+```
+
+> **Architecture note** — the official SHARP checkpoint stores an `RGBGaussianPredictor`
+> whose encoder is DepthPro-based (`SlidingPyramidNetwork` + `TimmViT`), not DINOv2.
+> The following partial remappings are applied where shapes align:
+> fusion-block conv weights from `gaussian_decoder.fusions.*` load into
+> `feature_decoder.fusion_blocks.*`, and the geometry prediction head loads into
+> `gaussian_head.xyz_head` when the output channel count matches.
+> Backbone and reassemble-block weights require an architectural realignment with
+> the official implementation for a full load.  A `UserWarning` lists missing keys.
 
 ---
 

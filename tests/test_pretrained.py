@@ -413,3 +413,138 @@ class TestCameraDepthModelFromPretrained:
                  "depth_head.scratch.output_conv1.bias":   torch.full((128,), 4.0)}
         model = self._run(sd=sd)
         assert torch.all(model.net.decoder.head[0].bias == 4.0)
+
+
+# ---------------------------------------------------------------------------
+# SHARPModel.from_pretrained
+#
+# The official checkpoint is fetched via torch.hub.load_state_dict_from_url
+# (Apple CDN, not HuggingFace).  torch.hub.load is also mocked to prevent
+# the DINOv2 backbone from being downloaded during SHARP.from_config.
+# ---------------------------------------------------------------------------
+
+_SHARP_CKPT_URL = (
+    "https://ml-site.cdn-apple.com/models/sharp/sharp_2572gikvuh.pt"
+)
+
+_F = 256   # default features width
+
+
+def _sharp_sd() -> dict[str, torch.Tensor]:
+    """Minimal official-format state dict for SHARP remapping tests.
+
+    Uses shapes compatible with our DPTDecoder (features=256) so the
+    shape-filter inside from_pretrained keeps them.
+    """
+    return {
+        # Fusion block 0 – resnet1 conv1
+        "gaussian_decoder.fusions.0.resnet1.residual.1.weight": torch.full((_F, _F, 3, 3), 7.0),
+        "gaussian_decoder.fusions.0.resnet1.residual.1.bias":   torch.zeros(_F),
+        # Fusion block 0 – resnet1 conv2
+        "gaussian_decoder.fusions.0.resnet1.residual.3.weight": torch.full((_F, _F, 3, 3), 2.0),
+        "gaussian_decoder.fusions.0.resnet1.residual.3.bias":   torch.zeros(_F),
+        # Fusion block 0 – out_conv
+        "gaussian_decoder.fusions.0.out_conv.weight": torch.full((_F, _F, 1, 1), 5.0),
+        "gaussian_decoder.fusions.0.out_conv.bias":   torch.zeros(_F),
+        # Fusion block 1 – resnet2 conv1
+        "gaussian_decoder.fusions.1.resnet2.residual.1.weight": torch.full((_F, _F, 3, 3), 3.0),
+        "gaussian_decoder.fusions.1.resnet2.residual.1.bias":   torch.zeros(_F),
+        # Geometry prediction head – 6 output channels (3×num_layers=2)
+        # Shape mismatch with our xyz_head (3 channels): should be filtered.
+        "prediction_head.geometry_prediction_head.weight": torch.zeros(6, _F, 1, 1),
+        "prediction_head.geometry_prediction_head.bias":   torch.zeros(6),
+    }
+
+
+class TestSHARPFromPretrained:
+
+    def _run(self, sd: dict | None = None):
+        from unicv.models.sharp.model import SHARPModel
+        mock_dino = _MockDINOv2(embed_dim=1024, num_blocks=12)
+        sd = sd if sd is not None else _sharp_sd()
+        with patch("torch.hub.load_state_dict_from_url", return_value=sd), \
+             patch("torch.hub.load", return_value=mock_dino):
+            return SHARPModel.from_pretrained()
+
+    # -- type --
+
+    def test_returns_sharp_model(self):
+        from unicv.models.sharp.model import SHARPModel
+        assert isinstance(self._run(), SHARPModel)
+
+    # -- download --
+
+    def test_correct_url(self):
+        mock_dino = _MockDINOv2(embed_dim=1024, num_blocks=12)
+        with patch("torch.hub.load_state_dict_from_url", return_value={}) as mock_dl, \
+             patch("torch.hub.load", return_value=mock_dino):
+            from unicv.models.sharp.model import SHARPModel
+            SHARPModel.from_pretrained()
+        assert mock_dl.call_args.args[0] == _SHARP_CKPT_URL
+
+    def test_cache_dir_forwarded(self):
+        mock_dino = _MockDINOv2(embed_dim=1024, num_blocks=12)
+        with patch("torch.hub.load_state_dict_from_url", return_value={}) as mock_dl, \
+             patch("torch.hub.load", return_value=mock_dino):
+            from unicv.models.sharp.model import SHARPModel
+            SHARPModel.from_pretrained(cache_dir="/tmp/weights")
+        assert mock_dl.call_args.kwargs["model_dir"] == "/tmp/weights"
+
+    # -- key remapping: fusion blocks --
+
+    def test_fusion_resnet1_conv1_remapped(self):
+        """fusions.0.resnet1.residual.1.weight → fusion_blocks[0].resConvUnit1.conv1.weight"""
+        sd    = {"gaussian_decoder.fusions.0.resnet1.residual.1.weight": torch.full((_F, _F, 3, 3), 7.0),
+                 "gaussian_decoder.fusions.0.resnet1.residual.1.bias":   torch.zeros(_F)}
+        model = self._run(sd)
+        assert torch.all(model.net.feature_decoder.fusion_blocks[0].resConvUnit1.conv1.weight == 7.0)
+
+    def test_fusion_resnet1_conv2_remapped(self):
+        """fusions.0.resnet1.residual.3.weight → fusion_blocks[0].resConvUnit1.conv2.weight"""
+        sd    = {"gaussian_decoder.fusions.0.resnet1.residual.3.weight": torch.full((_F, _F, 3, 3), 2.0),
+                 "gaussian_decoder.fusions.0.resnet1.residual.3.bias":   torch.zeros(_F)}
+        model = self._run(sd)
+        assert torch.all(model.net.feature_decoder.fusion_blocks[0].resConvUnit1.conv2.weight == 2.0)
+
+    def test_fusion_resnet2_conv1_remapped(self):
+        """fusions.1.resnet2.residual.1.weight → fusion_blocks[1].resConvUnit2.conv1.weight"""
+        sd    = {"gaussian_decoder.fusions.1.resnet2.residual.1.weight": torch.full((_F, _F, 3, 3), 3.0),
+                 "gaussian_decoder.fusions.1.resnet2.residual.1.bias":   torch.zeros(_F)}
+        model = self._run(sd)
+        assert torch.all(model.net.feature_decoder.fusion_blocks[1].resConvUnit2.conv1.weight == 3.0)
+
+    def test_fusion_out_conv_remapped(self):
+        """fusions.0.out_conv.weight → fusion_blocks[0].out_conv.weight"""
+        sd    = {"gaussian_decoder.fusions.0.out_conv.weight": torch.full((_F, _F, 1, 1), 5.0),
+                 "gaussian_decoder.fusions.0.out_conv.bias":   torch.zeros(_F)}
+        model = self._run(sd)
+        assert torch.all(model.net.feature_decoder.fusion_blocks[0].out_conv.weight == 5.0)
+
+    # -- shape filtering --
+
+    def test_shape_mismatch_does_not_raise(self):
+        """geometry_prediction_head with 6 output channels is silently dropped
+        (our xyz_head has 3 output channels)."""
+        sd = {
+            "prediction_head.geometry_prediction_head.weight": torch.zeros(6, _F, 1, 1),
+            "prediction_head.geometry_prediction_head.bias":   torch.zeros(6),
+        }
+        # Must not raise RuntimeError.
+        self._run(sd)
+
+    def test_geometry_head_loaded_when_shape_matches(self):
+        """If the official head happens to have matching shape (3 ch), it loads."""
+        sd    = {"prediction_head.geometry_prediction_head.weight": torch.full((3, _F, 1, 1), 9.0),
+                 "prediction_head.geometry_prediction_head.bias":   torch.zeros(3)}
+        model = self._run(sd)
+        assert torch.all(model.net.gaussian_head.xyz_head.weight == 9.0)
+
+    # -- warning on missing keys --
+
+    def test_missing_keys_warn(self):
+        """An empty state dict → all model keys are missing → UserWarning."""
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            self._run({})
+        assert any("SHARPModel" in str(x.message) for x in w)
