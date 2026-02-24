@@ -100,13 +100,77 @@ result = model(rgb=image_tensor)   # → {Modality.DEPTH: tensor}
 
 ## Roadmap
 
-We are actively building out the core modules of **unicv**.
+### Completed
 
-- [x] Set up the whole library
-- [x] Implement the [DPT Architecture](https://huggingface.co/docs/transformers/v4.41.0/model_doc/dpt)
-- [x] Implement the SDT Architecture from [AnyDepth](https://github.com/AIGeeksGroup/AnyDepth)
-- [x] Implement [DepthPro Model](https://github.com/apple/ml-depth-pro/blob/main/src/depth_pro/depth_pro.py)
-- [x] Implement [Depth Anything 3 Model](https://github.com/ByteDance-Seed/Depth-Anything-3/blob/main/src/depth_anything_3/model/da3.py)
+- [x] Set up the library, `VisionModule` interface, `Modality`/`InputForm` type system
+- [x] `unicv.nn`: `DPTDecoder`, `Reassemble`, `FeatureFusionBlock` — from the [DPT architecture](https://huggingface.co/docs/transformers/v4.41.0/model_doc/dpt)
+- [x] `unicv.nn`: `SDTHead` — lightweight decoder from [AnyDepth](https://github.com/AIGeeksGroup/AnyDepth)
+- [x] `unicv.nn`: `MultiresConvDecoder`, `FOVNetwork` — from [DepthPro](https://github.com/apple/ml-depth-pro)
+- [x] `unicv.models.depth_pro`: `DepthProEncoder`, `DepthPro`, `DepthProModel`
+- [x] `unicv.models.depth_anything_3`: `DINOv2Backbone`, `DepthAnything3`, `DepthAnything3Model`
+- [x] Full pytest suite (44 tests, all `torch.hub` calls mocked, offline)
+
+---
+
+### Shared infrastructure
+
+These building blocks are prerequisites for multiple catalogue models and should be implemented before the models that depend on them.
+
+- [ ] **Gaussian splat output container** — define a `GaussianCloud` dataclass (or named tensor dict) holding per-Gaussian attributes: positions `(N,3)`, scales `(N,3)`, rotations/quaternions `(N,4)`, opacities `(N,1)`, spherical-harmonic colour coefficients `(N, (deg+1)²×3)`; required by SHARP, DepthSplat, LongSplat, InstantSplat
+- [ ] **Gaussian parameter regression head** (`unicv.nn`) — a `GaussianHead` that maps a dense feature map to valid Gaussian parameters, using log-space scales, normalised quaternions, and sigmoid opacities; shared by SHARP and DepthSplat
+- [ ] **Mesh output container** — define a `TriangleMesh` dataclass holding `vertices (V,3)` and `faces (F,3)`; required by TRELLIS.2, SuGaR, Hunyuan3D-2.1
+- [ ] **Camera projection utilities** (`unicv.nn`) — differentiable `backproject_depth` (depth map → 3D point cloud), `homography_warp` (warp feature map between views given intrinsics/extrinsics); required by SimpleRecon, POMATO, DepthSplat
+- [ ] **Plane-sweep cost volume** (`unicv.nn`) — constructs a `(B, D, H, W)` matching volume by warping source frames to a set of fronto-parallel depth hypotheses using homographies, then computes NCC or learned similarity; required by SimpleRecon and DepthSplat
+- [ ] **3D sparse convolution wrapper** — thin wrapper around a sparse-conv library (e.g. [spconv](https://github.com/traveller59/spconv) or [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine)) for voxel-grid operations; required by TRELLIS.2
+
+---
+
+### Depth models
+
+- [ ] **[Camera Depth Model (CDM)](https://manipulation-as-in-simulation.github.io/#cdm-results)** — dual-ViT encoder: one ViT branch for RGB, one for the raw (noisy) depth signal; tokens are fused across multiple feature levels before being fed to a `DPTDecoder` (already in `unicv.nn`). Camera-specific variants (D405, Kinect, L515) differ only in pre-trained weights. Key challenges: multi-modal token fusion at every transformer layer, sim-to-real domain gap in training data.
+  - Inputs: `{Modality.RGB: SINGLE, Modality.DEPTH: SINGLE}` → `[Modality.DEPTH]`
+
+- [ ] **[SimpleRecon](https://nianticlabs.github.io/simplerecon/)** — lightweight backbone (e.g. MobileNetV2) encodes each frame independently; a plane-sweep cost volume aggregates multi-frame evidence by warping source features with homographies; 3D convolutions regularise the volume; softmax over depth candidates produces a depth map. Key challenges: cost-volume memory scales as `O(T × D × H × W)`, photometric consistency fails on textureless / reflective surfaces, requires accurate camera intrinsics.
+  - Inputs: `{Modality.RGB: TEMPORAL}` → `[Modality.DEPTH]`
+
+---
+
+### Gaussian splat models
+
+- [ ] **[SHARP](https://apple.github.io/ml-sharp/)** — fully feed-forward (< 1 s on a standard GPU): a ViT backbone encodes the single input image; a `GaussianHead` regresses per-pixel Gaussian parameters (position, scale, rotation, opacity, SH coefficients) with metric absolute scale. Key challenges: metric scale estimation without depth supervision, defining a canonical camera-frame Gaussian layout, achieving view-consistent appearance for arbitrary novel views. (arXiv: [2512.10685](https://arxiv.org/abs/2512.10685))
+  - Inputs: `{Modality.RGB: SINGLE}` → `[Modality.SPLAT]`
+
+- [ ] **[DepthSplat](https://haofeixu.github.io/depthsplat/)** — joint depth + Gaussian prediction from a stereo or sparse multi-view pair: shared ViT/ResNet backbone; cost-volume stereo matching for geometry; a `GaussianHead` reads out splat parameters from the multi-view feature volume. Can optionally export a mesh via Poisson reconstruction on the resulting point cloud. Key challenges: view-consistent Gaussian prediction (different views may disagree on scale/rotation), handling variable numbers of input views, epipolar geometry enforcement.
+  - Inputs: `{Modality.RGB: LIST}` → `[Modality.SPLAT]` (+ optionally `Modality.MESH`)
+
+- [ ] **[InstantSplat](https://instantsplat.github.io/)** — two-stage pose-free pipeline: (1) **Coarse Geometric Initialization** — run [DUSt3R](https://github.com/naver/dust3r) (ViT + cross-attention matching transformer + 3D point-map regression head) on all image pairs to get a globally-aligned point cloud and coarse camera poses; (2) **Fast 3DGS Optimization** — seed 3D Gaussians from the DUSt3R point cloud and jointly refine Gaussian attributes + camera poses with photometric loss + pose regularisation. Key challenges: integrating or reimplementing the DUSt3R matching transformer, differentiable 3DGS rasteriser, numerical stability of joint pose + Gaussian optimisation. ([arXiv: 2403.20309](https://arxiv.org/abs/2403.20309))
+  - Inputs: `{Modality.RGB: TEMPORAL}` → `[Modality.SPLAT]`
+
+- [ ] **[LongSplat](https://github.com/NVlabs/LongSplat)** (NVIDIA, ICCV 2025) — online, real-time generalizable 3DGS from long video: per-frame Gaussians are encoded as a **Gaussian-Image Representation (GIR)** — a structured 2D image-like tensor holding all splat attributes — which enables efficient incremental update; each new frame triggers (1) **online integration** (fuse new-view Gaussians with the GIR state) and (2) **adaptive compression** (prune redundant historical Gaussians to maintain a fixed memory budget, reducing Gaussian count by ~44 %). Key challenges: designing the GIR format, handling unbounded scene growth, temporal consistency across hundreds of frames. ([arXiv: 2508.14041](https://arxiv.org/abs/2508.14041))
+  - Inputs: `{Modality.RGB: TEMPORAL}` → `[Modality.SPLAT]`
+
+---
+
+### Mesh models
+
+- [ ] **[Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1)** — diffusion-based single-image 3D generation: a frozen CLIP / ViT backbone conditions a 3D latent diffusion model (transformer or 3D UNet operating on tri-plane features or voxel grids); denoising produces an implicit SDF; marching cubes extracts the final mesh. Key challenges: tri-plane or voxel latent-space design, 3D UNet with spatial self-attention (expensive), marching cubes is non-differentiable (no end-to-end gradient), training requires large-scale 3D data (Objaverse-scale).
+  - Inputs: `{Modality.RGB: SINGLE}` → `[Modality.MESH]`
+
+- [ ] **[SuGaR](https://anttwo.github.io/sugar/)** (CVPR 2024) — optimization-based multi-view reconstruction: (1) run standard 3DGS on the input image collection; (2) regularise Gaussians to lie on a thin surface shell (surface-alignment loss); (3) extract a mesh via Poisson surface reconstruction on the Gaussian centres/normals. Key challenges: requires a differentiable 3DGS rasteriser (e.g. [gsplat](https://github.com/nerfstudio-project/gsplat)), Poisson reconstruction is not differentiable, full pipeline takes 30–120 min per scene, the `VisionModule` interface needs an async/lazy-forward convention to accommodate long optimization loops.
+  - Inputs: `{Modality.RGB: LIST}` → `[Modality.MESH]`
+
+- [ ] **[TRELLIS.2](https://github.com/microsoft/TRELLIS.2)** (Microsoft, 4B params) — generates fully-textured PBR meshes at up to 1536³ voxel resolution via a **Sparse Compression 3D VAE** (16× spatial downsampling, sparse residual autoencoder) and a **flow-matching transformer** operating on O-Voxel structured latents; bidirectional O-Voxel ↔ mesh conversion is seconds-fast on CPU. Key challenges: requires custom CUDA/Triton kernels (FlexGEMM for sparse convolutions, CuMesh for remeshing/UV unwrapping), O-Voxel is a non-standard 3D representation with a dedicated dual-grid geometry + PBR material encoding, 4B-parameter model weight management.
+  - Inputs: `{Modality.RGB: SINGLE}` → `[Modality.MESH]`
+
+---
+
+### Point cloud models
+
+- [ ] **[POMATO](https://github.com/wyddmw/POMATO)** — pose-aware multi-frame RGB → point cloud: a shared CNN / ViT backbone extracts per-frame features; an optical-flow estimator (RAFT-style) warps features between frames; a temporal attention module aggregates evidence across the sequence; a depth / 3D regression head predicts per-pixel 3D coordinates. Key challenges: optical-flow errors accumulate in long sequences, 4D cost-volume memory `O(T × D × H × W)` is large, occlusion handling, camera-pose accuracy strongly affects reconstruction quality.
+  - Inputs: `{Modality.RGB: TEMPORAL}` → `[Modality.POINT_CLOUD]`
+
+- [ ] **[MASt3R-SLAM](https://edexheim.github.io/mast3r-slam/)** — full monocular SLAM system built on [DUSt3R](https://github.com/naver/dust3r): a ViT + cross-attention **matching transformer** predicts dense correspondences and per-pixel 3D point-map positions for every image pair; a sliding-window pose graph accumulates keyframes; bundle adjustment (differentiable or classical Levenberg–Marquardt) refines camera trajectories; loop-closure re-runs the matching transformer on stored keyframe pairs. Key challenges: the matching transformer is quadratic in image pairs `O(K²)`, differentiable bundle adjustment is non-standard (requires sparse linear-solve backprop or a neural approximation), dynamic scene objects violate static-scene assumptions, metric scale is inherently ambiguous without a depth sensor.
+  - Inputs: `{Modality.RGB: TEMPORAL}` → `[Modality.POINT_CLOUD]`
 
 ### Catalogue of models
 
