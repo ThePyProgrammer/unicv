@@ -127,17 +127,17 @@ These building blocks are prerequisites for multiple catalogue models and should
 
 ### Depth models
 
-- [ ] **[Camera Depth Model (CDM)](https://manipulation-as-in-simulation.github.io/#cdm-results)** — dual-ViT encoder: one ViT branch for RGB, one for the raw (noisy) depth signal; tokens are fused across multiple feature levels before being fed to a `DPTDecoder` (already in `unicv.nn`). Camera-specific variants (D405, Kinect, L515) differ only in pre-trained weights. Key challenges: multi-modal token fusion at every transformer layer, sim-to-real domain gap in training data.
+- [x] **[Camera Depth Model (CDM)](https://manipulation-as-in-simulation.github.io/#cdm-results)** — dual-ViT encoder: one ViT branch for RGB, one for the raw (noisy) depth signal; tokens are fused across multiple feature levels before being fed to a `DPTDecoder` (already in `unicv.nn`). Camera-specific variants (D405, Kinect, L515) differ only in pre-trained weights. Key challenges: multi-modal token fusion at every transformer layer, sim-to-real domain gap in training data.
   - Inputs: `{Modality.RGB: SINGLE, Modality.DEPTH: SINGLE}` → `[Modality.DEPTH]`
 
-- [ ] **[SimpleRecon](https://nianticlabs.github.io/simplerecon/)** — lightweight backbone (e.g. MobileNetV2) encodes each frame independently; a plane-sweep cost volume aggregates multi-frame evidence by warping source features with homographies; 3D convolutions regularise the volume; softmax over depth candidates produces a depth map. Key challenges: cost-volume memory scales as `O(T × D × H × W)`, photometric consistency fails on textureless / reflective surfaces, requires accurate camera intrinsics.
+- [x] **[SimpleRecon](https://nianticlabs.github.io/simplerecon/)** — lightweight backbone (e.g. MobileNetV2) encodes each frame independently; a plane-sweep cost volume aggregates multi-frame evidence by warping source features with homographies; 3D convolutions regularise the volume; softmax over depth candidates produces a depth map. Key challenges: cost-volume memory scales as `O(T × D × H × W)`, photometric consistency fails on textureless / reflective surfaces, requires accurate camera intrinsics.
   - Inputs: `{Modality.RGB: TEMPORAL}` → `[Modality.DEPTH]`
 
 ---
 
 ### Gaussian splat models
 
-- [ ] **[SHARP](https://apple.github.io/ml-sharp/)** — fully feed-forward (< 1 s on a standard GPU): a ViT backbone encodes the single input image; a `GaussianHead` regresses per-pixel Gaussian parameters (position, scale, rotation, opacity, SH coefficients) with metric absolute scale. Key challenges: metric scale estimation without depth supervision, defining a canonical camera-frame Gaussian layout, achieving view-consistent appearance for arbitrary novel views. (arXiv: [2512.10685](https://arxiv.org/abs/2512.10685))
+- [x] **[SHARP](https://apple.github.io/ml-sharp/)** — fully feed-forward (< 1 s on a standard GPU): a ViT backbone encodes the single input image; a `GaussianHead` regresses per-pixel Gaussian parameters (position, scale, rotation, opacity, SH coefficients) with metric absolute scale. Key challenges: metric scale estimation without depth supervision, defining a canonical camera-frame Gaussian layout, achieving view-consistent appearance for arbitrary novel views. (arXiv: [2512.10685](https://arxiv.org/abs/2512.10685))
   - Inputs: `{Modality.RGB: SINGLE}` → `[Modality.SPLAT]`
 
 - [ ] **[DepthSplat](https://haofeixu.github.io/depthsplat/)** — joint depth + Gaussian prediction from a stereo or sparse multi-view pair: shared ViT/ResNet backbone; cost-volume stereo matching for geometry; a `GaussianHead` reads out splat parameters from the multi-view feature volume. Can optionally export a mesh via Poisson reconstruction on the resulting point cloud. Key challenges: view-consistent Gaussian prediction (different views may disagree on scale/rotation), handling variable numbers of input views, epipolar geometry enforcement.
