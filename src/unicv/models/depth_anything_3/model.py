@@ -248,6 +248,168 @@ class DepthAnything3Model(VisionModule):
         depth = self.net(rgb)
         return {Modality.DEPTH: depth}
 
+    @classmethod
+    def from_pretrained(
+        cls,
+        variant: str = "vit_l",
+        img_size: int = 518,
+        features: int = 256,
+        cache_dir: str | None = None,
+    ) -> "DepthAnything3Model":
+        """Load official Depth Anything 3 pretrained weights.
+
+        Downloads a model checkpoint from the ``depth-anything`` organisation on
+        Hugging Face Hub and loads it into a freshly constructed
+        ``DepthAnything3Model``.
+
+        Supported variants and their Hub repos:
+
+        =========  =====================================  ===========
+        variant    repo_id                                embed_dim
+        =========  =====================================  ===========
+        ``vit_s``  ``depth-anything/DA3-SMALL``           384
+        ``vit_b``  ``depth-anything/DA3-BASE``            768
+        ``vit_l``  ``depth-anything/DA3-LARGE``  (default) 1024
+        ``vit_g``  ``depth-anything/DA3-GIANT``           1536
+        =========  =====================================  ===========
+
+        Key mapping applied before loading
+        -----------------------------------
+        The official checkpoints use a different module naming convention:
+
+        * ``pretrained.*``                      → ``backbone.model.*``
+        * ``depth_head.projects.{i}.*``         → ``decoder.reassemble_blocks.{i}.project.*``
+        * ``depth_head.resize_layers.{i}.*``    → ``decoder.reassemble_blocks.{i}.resample.*``
+        * ``depth_head.scratch.refinenet{n}.*`` → ``decoder.fusion_blocks.{4-n}.*``
+          (with ``resConfUnit`` renamed to ``resConvUnit``)
+        * ``depth_head.scratch.output_conv1.*`` → ``decoder.head.0.*``
+        * ``depth_head.scratch.output_conv2.*`` → ``decoder.head.2.*``
+
+        ``strict=False`` is used so that keys present in the checkpoint but
+        absent from the unicv architecture (e.g. ``depth_head.scratch.layer_rn*``
+        intermediate convolutions) are silently ignored.
+
+        Requirements
+        ------------
+        ``pip install huggingface_hub safetensors``
+
+        Args:
+            variant:   DINOv2 backbone size.  One of
+                       ``"vit_s"``, ``"vit_b"``, ``"vit_l"``, ``"vit_g"``.
+            img_size:  Square input resolution expected by the backbone and
+                       decoder (default 518, matching official training).
+            features:  Decoder channel width (default 256).
+            cache_dir: Optional Hugging Face cache directory.
+
+        Returns:
+            A ``DepthAnything3Model`` with pretrained weights loaded.
+
+        Example::
+
+            model = DepthAnything3Model.from_pretrained("vit_l")
+        """
+        try:
+            from huggingface_hub import hf_hub_download
+        except ImportError:
+            raise ImportError(
+                "DepthAnything3Model.from_pretrained requires huggingface_hub.\n"
+                "Install it with:  pip install huggingface_hub"
+            )
+
+        _VARIANT_TO_REPO = {
+            "vit_s": "depth-anything/DA3-SMALL",
+            "vit_b": "depth-anything/DA3-BASE",
+            "vit_l": "depth-anything/DA3-LARGE",
+            "vit_g": "depth-anything/DA3-GIANT",
+        }
+        if variant not in _VARIANT_TO_REPO:
+            raise ValueError(
+                f"variant must be one of {list(_VARIANT_TO_REPO)}, got {variant!r}"
+            )
+
+        repo_id = _VARIANT_TO_REPO[variant]
+        ckpt_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="model.safetensors",
+            cache_dir=cache_dir,
+        )
+
+        # Load checkpoint (safetensors preferred; fall back to torch.load).
+        if ckpt_path.endswith(".safetensors"):
+            try:
+                from safetensors.torch import load_file as _load_safetensors
+                raw_sd = _load_safetensors(ckpt_path)
+            except ImportError:
+                raise ImportError(
+                    "Loading safetensors checkpoints requires the safetensors package.\n"
+                    "Install it with:  pip install safetensors"
+                )
+        else:
+            raw_sd = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+
+        # Build architecture. pretrained=False because we load backbone weights
+        # from the checkpoint itself (avoids a second torch.hub download).
+        net = DepthAnything3.from_config(
+            variant=variant,
+            img_size=img_size,
+            features=features,
+            pretrained=False,
+        )
+
+        # Remap checkpoint keys to unicv naming.
+        remapped: dict[str, torch.Tensor] = {}
+        for key, val in raw_sd.items():
+            new_key = key
+
+            if new_key.startswith("pretrained."):
+                # DINOv2 backbone weights.
+                new_key = "backbone.model." + new_key[len("pretrained."):]
+
+            elif new_key.startswith("depth_head.projects."):
+                # Reassemble project conv: depth_head.projects.{i}.* → reassemble_blocks.{i}.project.*
+                rest = new_key[len("depth_head.projects."):]
+                idx, _, tail = rest.partition(".")
+                new_key = f"decoder.reassemble_blocks.{idx}.project.{tail}"
+
+            elif new_key.startswith("depth_head.resize_layers."):
+                # Reassemble spatial resample: depth_head.resize_layers.{i}.* → reassemble_blocks.{i}.resample.*
+                rest = new_key[len("depth_head.resize_layers."):]
+                idx, _, tail = rest.partition(".")
+                new_key = f"decoder.reassemble_blocks.{idx}.resample.{tail}"
+
+            elif new_key.startswith("depth_head.scratch.refinenet"):
+                # Fusion blocks — stored in reverse order in the checkpoint.
+                # refinenet4 (coarsest) → fusion_blocks[3]; refinenet1 (finest) → fusion_blocks[0].
+                rest = new_key[len("depth_head.scratch.refinenet"):]
+                n_str, _, tail = rest.partition(".")
+                i = 4 - int(n_str)            # refinenet4→0, refinenet3→1, …
+                tail = tail.replace("resConfUnit", "resConvUnit")
+                new_key = f"decoder.fusion_blocks.{i}.{tail}"
+
+            elif new_key.startswith("depth_head.scratch.output_conv1."):
+                tail = new_key[len("depth_head.scratch.output_conv1."):]
+                new_key = f"decoder.head.0.{tail}"
+
+            elif new_key.startswith("depth_head.scratch.output_conv2."):
+                tail = new_key[len("depth_head.scratch.output_conv2."):]
+                new_key = f"decoder.head.2.{tail}"
+
+            # Keys that don't match any pattern (e.g. depth_head.scratch.layer_rn*)
+            # are kept as-is and will fall through strict=False unmatched.
+            remapped[new_key] = val
+
+        missing, _ = net.load_state_dict(remapped, strict=False)
+        if missing:
+            import warnings
+            shown = missing[:5]
+            warnings.warn(
+                f"DepthAnything3 ({variant}): {len(missing)} missing key(s) when "
+                f"loading pretrained weights (first 5): {shown}",
+                stacklevel=2,
+            )
+
+        return cls(net=net)
+
 
 __all__ = [
     "DINOv2Backbone",

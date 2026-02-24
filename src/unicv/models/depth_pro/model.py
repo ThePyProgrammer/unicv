@@ -196,5 +196,110 @@ class DepthProModel(VisionModule):
         result = self.net.infer(rgb)
         return {Modality.DEPTH: result["depth"]}
 
+    @classmethod
+    def from_pretrained(
+        cls,
+        use_fov_head: bool = True,
+        cache_dir: str | None = None,
+    ) -> "DepthProModel":
+        """Load the official Apple DepthPro pretrained weights.
+
+        Downloads ``depth_pro.pt`` from ``apple/DepthPro`` on Hugging Face Hub
+        and loads it into a freshly constructed ``DepthProModel``.
+
+        The checkpoint was produced by Apple's original training code whose
+        architecture is identical to this unicv reimplementation, so all
+        keys load directly with no remapping.  ``strict=False`` is used to
+        gracefully handle minor structural differences (e.g. the optional FOV
+        head).
+
+        Requirements
+        ------------
+        ``pip install huggingface_hub timm``
+
+        Args:
+            use_fov_head: Whether to include the FOV estimation head.  The
+                official checkpoint always contains FOV weights; set this to
+                ``False`` only if you want to discard them.
+            cache_dir: Optional directory for the Hugging Face cache.  Defaults
+                to the standard HF cache location (``~/.cache/huggingface``).
+
+        Returns:
+            A ``DepthProModel`` with pretrained weights loaded.
+
+        Example::
+
+            model = DepthProModel.from_pretrained()
+        """
+        try:
+            from huggingface_hub import hf_hub_download
+        except ImportError:
+            raise ImportError(
+                "DepthProModel.from_pretrained requires huggingface_hub.\n"
+                "Install it with:  pip install huggingface_hub"
+            )
+        try:
+            import timm
+        except ImportError:
+            raise ImportError(
+                "DepthProModel.from_pretrained requires timm.\n"
+                "Install it with:  pip install timm"
+            )
+
+        # --- Download checkpoint ---
+        ckpt_path = hf_hub_download(
+            repo_id="apple/DepthPro",
+            filename="depth_pro.pt",
+            cache_dir=cache_dir,
+        )
+        state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+
+        # --- Build architecture matching the official training config ---
+        # ViT-L/16 as patch encoder (embed_dim=1024, 24 blocks)
+        patch_encoder = timm.create_model(
+            "vit_large_patch16_384",
+            pretrained=False,
+            num_classes=0,
+            img_size=384,
+        )
+        # ViT-B/16 as image encoder (embed_dim=768, 12 blocks)
+        image_encoder = timm.create_model(
+            "vit_base_patch16_384",
+            pretrained=False,
+            num_classes=0,
+            img_size=384,
+        )
+        encoder = DepthProEncoder(
+            dims_encoder=[256, 512, 1024, 1024],
+            patch_encoder=patch_encoder,
+            image_encoder=image_encoder,
+            hook_block_ids=[5, 11],      # ~1/4 and ~1/2 depth of ViT-L (24 blocks)
+            decoder_features=256,
+        )
+        decoder = MultiresConvDecoder(
+            dims_encoder=[256, 256, 512, 1024, 1024],
+            dim_decoder=256,
+        )
+        net = DepthPro(
+            encoder=encoder,
+            decoder=decoder,
+            last_dims=(32, 1),
+            use_fov_head=use_fov_head,
+        )
+
+        # --- Load weights ---
+        # Checkpoint keys match the DepthPro module directly (same codebase).
+        missing, unexpected = net.load_state_dict(state_dict, strict=False)
+        if missing:
+            import warnings
+            shown = missing[:5]
+            warnings.warn(
+                f"DepthPro: {len(missing)} missing key(s) when loading pretrained "
+                f"weights (first 5): {shown}",
+                stacklevel=2,
+            )
+
+        return cls(net=net)
+
 
 __all__ = ["DepthPro", "DepthProModel"]
