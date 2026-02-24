@@ -91,10 +91,13 @@ result = model(rgb=image_tensor)   # → {Modality.DEPTH: tensor}
 
 ### Implemented models
 
-| Model | Class | Input → Output |
-|---|---|---|
-| [DepthPro](https://github.com/apple/ml-depth-pro) | `DepthProModel` | RGB → Depth |
-| [Depth Anything 3](https://depth-anything-3.github.io/) | `DepthAnything3Model` | RGB → Depth |
+| Model | Class | Input → Output | Pretrained |
+|---|---|---|---|
+| [DepthPro](https://github.com/apple/ml-depth-pro) | `DepthProModel` | RGB → Depth | `DepthProModel.from_pretrained()` |
+| [Depth Anything 3](https://depth-anything-3.github.io/) | `DepthAnything3Model` | RGB → Depth | `DepthAnything3Model.from_pretrained(variant=...)` |
+| [Camera Depth Model](https://manipulation-as-in-simulation.github.io/#cdm-results) | `CameraDepthModel` | RGB + Depth → Depth | `CameraDepthModel.from_pretrained(camera=...)` |
+| [SHARP](https://apple.github.io/ml-sharp/) | `SHARPModel` | RGB → Splat | — |
+| [SimpleRecon](https://nianticlabs.github.io/simplerecon/) | `SimpleReconModel` | RGB (temporal) → Depth | — |
 
 ---
 
@@ -214,6 +217,94 @@ To set up a full development environment with [uv](https://github.com/astral-sh/
 
 ```bash
 uv sync --dev
+```
+
+---
+
+## Loading pretrained models
+
+Each implemented model ships with a `from_pretrained` classmethod that downloads the official checkpoint from Hugging Face Hub and loads it into the UniCV architecture.
+
+Install the optional dependencies first:
+
+```bash
+pip install huggingface_hub timm safetensors
+```
+
+---
+
+### DepthPro
+
+Loads Apple's DepthPro weights from [`apple/DepthPro`](https://huggingface.co/apple/DepthPro).  Requires `huggingface_hub` and `timm`.
+
+```python
+from unicv.models.depth_pro import DepthProModel
+
+model = DepthProModel.from_pretrained()                        # default: includes FoV head
+model = DepthProModel.from_pretrained(use_fov_head=False)      # depth-only variant
+model.eval()
+
+result = model(rgb=image_tensor)   # image_tensor: (B, 3, 1536, 1536)
+depth  = result["depth"]           # metric depth in metres, same spatial size
+```
+
+---
+
+### Depth Anything 3
+
+Downloads checkpoints from the [`depth-anything`](https://huggingface.co/depth-anything) organisation.  Four backbone sizes are available.  Requires `huggingface_hub` and `safetensors`.
+
+| `variant` | Hugging Face repo | Backbone embed dim |
+|---|---|---|
+| `"vit_s"` | `depth-anything/DA3-SMALL`  | 384  |
+| `"vit_b"` | `depth-anything/DA3-BASE`   | 768  |
+| `"vit_l"` | `depth-anything/DA3-LARGE` *(default)* | 1024 |
+| `"vit_g"` | `depth-anything/DA3-GIANT`  | 1536 |
+
+```python
+from unicv.models.depth_anything_3 import DepthAnything3Model
+
+model = DepthAnything3Model.from_pretrained(variant="vit_l")   # default
+model.eval()
+
+result = model(rgb=image_tensor)   # image_tensor: (B, 3, H, W)
+depth  = result["depth"]           # inverse-depth map, shape (B, 1, H, W)
+```
+
+---
+
+### Camera Depth Model (CDM)
+
+Downloads camera-specific checkpoints from [`depth-anything/camera-depth-model-{camera}`](https://huggingface.co/depth-anything).  Choose the variant that matches your depth sensor.  Requires `huggingface_hub`.
+
+| `camera` | Hugging Face repo | Sensor |
+|---|---|---|
+| `"d405"` *(default)* | `depth-anything/camera-depth-model-d405`   | Intel RealSense D405 |
+| `"d435"` | `depth-anything/camera-depth-model-d435`   | Intel RealSense D435 |
+| `"l515"` | `depth-anything/camera-depth-model-l515`   | Intel RealSense L515 |
+| `"kinect"` | `depth-anything/camera-depth-model-kinect` | Azure Kinect |
+
+```python
+from unicv.models.cdm import CameraDepthModel
+
+model = CameraDepthModel.from_pretrained(camera="d405")   # default
+model.eval()
+
+result  = model(rgb=rgb_tensor, depth=raw_depth_tensor)   # both (B, *, H, W)
+refined = result["depth"]                                  # refined depth, (B, 1, H, W)
+```
+
+---
+
+### Cache directory
+
+All three methods accept a `cache_dir` keyword that is forwarded directly to `hf_hub_download`.  When omitted, weights land in the default Hugging Face cache (`~/.cache/huggingface`).
+
+```python
+model = DepthAnything3Model.from_pretrained(
+    variant="vit_l",
+    cache_dir="/data/hf_cache",
+)
 ```
 
 ---
