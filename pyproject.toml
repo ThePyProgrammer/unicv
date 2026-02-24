@@ -9,6 +9,8 @@ authors = [
 requires-python = ">=3.10"
 dependencies = [
     "einops~=0.6.0",
+    "huggingface-hub>=1.4.1",
+    "timm>=1.0.25",
     "torch~=2.0",
 ]
 
