@@ -51,21 +51,25 @@ In addition to standard convolutional and Transformer-based architectures, UniCV
 ```
 src/unicv/
 ├── utils/
-│   └── types.py              # Modality and InputForm enums
+│   ├── types.py              # Modality and InputForm enums
+│   └── structs.py            # GaussianCloud, TriangleMesh dataclasses
 ├── models/
-│   ├── base.py               # VisionModule abstract base class
+│   ├── base.py               # VisionModule ABC + checkpoint helpers
 │   ├── depth_pro/            # DepthPro (Apple, 2024)
 │   ├── depth_anything_3/     # Depth Anything 3 (ByteDance, 2025)
 │   ├── cdm/                  # Camera Depth Model (ByteDance, 2025)
 │   ├── sharp/                # SHARP (Apple, 2024)
-│   └── simplerecon/          # SimpleRecon (Niantic, 2022)
+│   └── simple_recon/         # SimpleRecon (Niantic, 2022)
 └── nn/
+    ├── dinov2.py             # DINOv2Backbone (shared by DA3, CDM, SHARP)
     ├── decoder.py            # MultiresConvDecoder, FeatureFusionBlock2d
     ├── dpt.py                # DPTDecoder, Reassemble, FeatureFusionBlock
     ├── fov.py                # FOVNetwork (field-of-view estimation)
     ├── sdt.py                # SDTHead (AnyDepth lightweight decoder)
     ├── gaussian.py           # GaussianHead
-    └── geometry.py           # backproject_depth, homography_warp
+    ├── geometry.py           # backproject_depth, homography_warp, default_intrinsics
+    ├── cost_volume.py        # PlaneSweepCostVolume
+    └── sparse3d.py           # SparseConv3d (optional spconv/MinkowskiEngine)
 ```
 
 ### The `VisionModule` interface
@@ -100,16 +104,19 @@ result = model(rgb=image_tensor)   # → {Modality.DEPTH: tensor}
 
 ### `unicv.nn` building blocks
 
-| Class                  | File          | Purpose                                                                                 |
-| ---------------------- | ------------- | --------------------------------------------------------------------------------------- |
-| `MultiresConvDecoder`  | `decoder.py`  | Fuses multi-scale encoder maps finest → coarsest; used by DepthPro                      |
-| `FeatureFusionBlock2d` | `decoder.py`  | Single fusion step with optional residual skip and deconv upsampling                    |
-| `DPTDecoder`           | `dpt.py`      | Full DPT pipeline: reassemble patch tokens → spatial maps, fuse; used by DA3 and CDM    |
-| `Reassemble`           | `dpt.py`      | Converts flat ViT patch tokens to 2-D feature maps at a configurable scale              |
-| `FeatureFusionBlock`   | `dpt.py`      | DPT-style fusion with 2× bilinear upsampling                                            |
-| `FOVNetwork`           | `fov.py`      | Estimates a scalar field-of-view from a low-resolution feature map                      |
-| `SDTHead`              | `sdt.py`      | Lightweight decoder from AnyDepth: per-level attention + depth-wise fusion              |
-| `GaussianHead`         | `gaussian.py` | Regresses per-pixel Gaussian parameters (scales, rotations, opacities, SH coefficients) |
+| Class                    | File             | Purpose                                                                                 |
+| ------------------------ | ---------------- | --------------------------------------------------------------------------------------- |
+| `DINOv2Backbone`         | `dinov2.py`      | Wraps `torch.hub` DINOv2 with intermediate hook capture; shared by DA3, CDM, SHARP      |
+| `MultiresConvDecoder`    | `decoder.py`     | Fuses multi-scale encoder maps finest → coarsest; used by DepthPro                      |
+| `FeatureFusionBlock2d`   | `decoder.py`     | Single fusion step with optional residual skip and deconv upsampling                    |
+| `DPTDecoder`             | `dpt.py`         | Full DPT pipeline: reassemble patch tokens → spatial maps, fuse; used by DA3 and CDM    |
+| `Reassemble`             | `dpt.py`         | Converts flat ViT patch tokens to 2-D feature maps at a configurable scale              |
+| `FeatureFusionBlock`     | `dpt.py`         | DPT-style fusion with 2× bilinear upsampling                                            |
+| `FOVNetwork`             | `fov.py`         | Estimates a scalar field-of-view from a low-resolution feature map                      |
+| `SDTHead`                | `sdt.py`         | Lightweight decoder from AnyDepth: per-level attention + depth-wise fusion              |
+| `GaussianHead`           | `gaussian.py`    | Regresses per-pixel Gaussian parameters (scales, rotations, opacities, SH coefficients) |
+| `PlaneSweepCostVolume`   | `cost_volume.py` | Builds matching volume from multi-view features at discrete depth hypotheses             |
+| `SparseConv3d`           | `sparse3d.py`    | Optional sparse 3-D convolution with backend auto-detection                             |
 
 ---
 
@@ -157,7 +164,7 @@ uv run pytest -v   # run the full test suite
 Each model with a `from_pretrained` classmethod downloads the official checkpoint and loads it into the UniCV architecture. Install the optional dependencies first:
 
 ```bash
-pip install huggingface_hub timm safetensors
+pip install unicv[pretrained]
 ```
 
 ### DepthPro
@@ -255,12 +262,12 @@ model = DepthAnything3Model.from_pretrained(
 ### Foundation — complete
 
 - [x] `VisionModule` base class, `Modality` / `InputForm` type system
-- [x] `unicv.nn`: `DPTDecoder`, `Reassemble`, `FeatureFusionBlock` (DPT architecture)
+- [x] `unicv.nn`: `DINOv2Backbone`, `DPTDecoder`, `Reassemble`, `FeatureFusionBlock`
 - [x] `unicv.nn`: `SDTHead` (AnyDepth lightweight decoder)
 - [x] `unicv.nn`: `MultiresConvDecoder`, `FOVNetwork` (DepthPro)
 - [x] `unicv.nn`: `GaussianHead`, `GaussianCloud`, `TriangleMesh`
-- [x] `unicv.nn`: `backproject_depth`, `homography_warp` (camera projection utilities)
-- [x] `unicv.nn`: plane-sweep cost volume
+- [x] `unicv.nn`: `backproject_depth`, `homography_warp`, `default_intrinsics`
+- [x] `unicv.nn`: `PlaneSweepCostVolume`, `SparseConv3d`
 - [x] Full pytest suite (200+ tests, mocked external downloads, offline)
 
 ### Depth estimation
