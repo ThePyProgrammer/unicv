@@ -32,7 +32,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from unicv.models.base import VisionModule, _remap_dpt_key, _require_package, _warn_missing_keys
+from unicv.models.base import VisionModule, _remap_checkpoint, _require_package, _warn_missing_keys
 from unicv.nn.dpt import DPTDecoder
 from unicv.utils.types import InputForm, Modality
 
@@ -307,26 +307,11 @@ class CameraDepthModel(VisionModule):
         )
 
         # Remap checkpoint keys to unicv CDM naming.
-        remapped: dict[str, torch.Tensor] = {}
-        for key, val in state_dict.items():
-            new_key = key
-
-            # --- RGB backbone ---
-            if new_key.startswith("pretrained.") or new_key.startswith("rgb_encoder."):
-                prefix_len = len("pretrained.") if new_key.startswith("pretrained.") else len("rgb_encoder.")
-                new_key = "rgb_backbone.model." + new_key[prefix_len:]
-
-            # --- Depth backbone ---
-            elif new_key.startswith("depth_encoder."):
-                new_key = "depth_backbone.model." + new_key[len("depth_encoder."):]
-
-            else:
-                dpt_key = _remap_dpt_key(new_key)
-                if dpt_key is not None:
-                    new_key = dpt_key
-
-            # depth_proj.*, fusion_layers.*, decoder.* -- pass through unchanged.
-            remapped[new_key] = val
+        remapped = _remap_checkpoint(state_dict, {
+            "pretrained.": "rgb_backbone.model.",
+            "rgb_encoder.": "rgb_backbone.model.",
+            "depth_encoder.": "depth_backbone.model.",
+        })
 
         missing, _ = net.load_state_dict(remapped, strict=False)
         _warn_missing_keys(f"CameraDepthModel ({camera})", missing)

@@ -22,7 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from unicv.models.base import VisionModule, _remap_dpt_key, _require_package, _warn_missing_keys
+from unicv.models.base import VisionModule, _remap_checkpoint, _require_package, _warn_missing_keys
 from unicv.nn.dinov2 import DINOv2Backbone
 from unicv.nn.dpt import DPTDecoder
 from unicv.utils.types import InputForm, Modality
@@ -230,20 +230,7 @@ class DepthAnything3Model(VisionModule):
         )
 
         # Remap checkpoint keys to unicv naming.
-        remapped: dict[str, torch.Tensor] = {}
-        for key, val in raw_sd.items():
-            new_key = key
-
-            if new_key.startswith("pretrained."):
-                new_key = "backbone.model." + new_key[len("pretrained."):]
-            else:
-                dpt_key = _remap_dpt_key(new_key)
-                if dpt_key is not None:
-                    new_key = dpt_key
-
-            # Keys that don't match any pattern (e.g. depth_head.scratch.layer_rn*)
-            # are kept as-is and will fall through strict=False unmatched.
-            remapped[new_key] = val
+        remapped = _remap_checkpoint(raw_sd, {"pretrained.": "backbone.model."})
 
         missing, _ = net.load_state_dict(remapped, strict=False)
         _warn_missing_keys(f"DepthAnything3 ({variant})", missing)

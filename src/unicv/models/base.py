@@ -1,8 +1,12 @@
 """VisionModule base class and shared checkpoint-loading utilities."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Any
 import warnings
+
+import torch
 
 from unicv.utils.types import Modality, InputForm
 
@@ -52,6 +56,39 @@ def _remap_dpt_key(key: str) -> str | None:
         return f"decoder.head.2.{tail}"
 
     return None
+
+
+def _remap_checkpoint(
+    raw_sd: dict[str, torch.Tensor],
+    prefix_map: dict[str, str],
+) -> dict[str, torch.Tensor]:
+    """Remap a checkpoint state dict using prefix substitutions + DPT keys.
+
+    Args:
+        raw_sd: Raw state dict from the checkpoint.
+        prefix_map: Mapping of source prefixes to target prefixes,
+            e.g. ``{"pretrained.": "backbone.model."}``.
+
+    Returns:
+        Remapped state dict.  Unrecognised keys pass through unchanged.
+    """
+    remapped: dict[str, torch.Tensor] = {}
+    for key, val in raw_sd.items():
+        new_key = key
+
+        # Try prefix substitutions first.
+        for src_prefix, dst_prefix in prefix_map.items():
+            if new_key.startswith(src_prefix):
+                new_key = dst_prefix + new_key[len(src_prefix):]
+                break
+        else:
+            # No prefix matched -- try DPT key remapping.
+            dpt_key = _remap_dpt_key(new_key)
+            if dpt_key is not None:
+                new_key = dpt_key
+
+        remapped[new_key] = val
+    return remapped
 
 
 def _warn_missing_keys(
@@ -171,6 +208,7 @@ class VisionModule(ABC):
 
 __all__ = [
     "VisionModule",
+    "_remap_checkpoint",
     "_remap_dpt_key",
     "_require_package",
     "_warn_missing_keys",
