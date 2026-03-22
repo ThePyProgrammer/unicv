@@ -17,7 +17,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from unicv.models.base import VisionModule
+from unicv.models.base import VisionModule, _require_package, _warn_missing_keys
 from unicv.models.depth_pro.encoder import DepthProEncoder
 from unicv.nn.decoder import MultiresConvDecoder
 from unicv.nn.fov import FOVNetwork
@@ -75,6 +75,48 @@ class DepthPro(nn.Module):
         if use_fov_head:
             self.fov = FOVNetwork(num_features=dim_decoder, fov_encoder=fov_encoder)
 
+    @classmethod
+    def from_config(
+        cls,
+        use_fov_head: bool = True,
+    ) -> "DepthPro":
+        """Build DepthPro from the official architecture configuration.
+
+        Requires ``timm`` for the ViT backbones.
+
+        Args:
+            use_fov_head: Whether to attach the FOV estimation head.
+
+        Returns:
+            An initialised ``DepthPro`` model.
+        """
+        _require_package("timm")
+        import timm
+
+        patch_encoder = timm.create_model(
+            "vit_large_patch16_384", pretrained=False, num_classes=0, img_size=384,
+        )
+        image_encoder = timm.create_model(
+            "vit_base_patch16_384", pretrained=False, num_classes=0, img_size=384,
+        )
+        encoder = DepthProEncoder(
+            dims_encoder=[256, 512, 1024, 1024],
+            patch_encoder=patch_encoder,
+            image_encoder=image_encoder,
+            hook_block_ids=[5, 11],
+            decoder_features=256,
+        )
+        decoder = MultiresConvDecoder(
+            dims_encoder=[256, 256, 512, 1024, 1024],
+            dim_decoder=256,
+        )
+        return cls(
+            encoder=encoder,
+            decoder=decoder,
+            last_dims=(32, 1),
+            use_fov_head=use_fov_head,
+        )
+
     @property
     def img_size(self) -> int:
         """Return the internal image size of the network."""
@@ -93,7 +135,11 @@ class DepthPro(nn.Module):
             *fov_deg* is ``None`` when the FOV head is disabled.
         """
         _, _, H, W = x.shape
-        assert H == self.img_size and W == self.img_size
+        if H != self.img_size or W != self.img_size:
+            raise ValueError(
+                f"Expected input size ({self.img_size}, {self.img_size}), "
+                f"got ({H}, {W})"
+            )
 
         encodings = self.encoder(x)
         features, features_0 = self.decoder(encodings)
@@ -143,6 +189,12 @@ class DepthPro(nn.Module):
         canonical_inverse_depth, fov_deg = self.forward(x)
 
         if f_px is None:
+            if fov_deg is None:
+                raise ValueError(
+                    "f_px is required when the FOV head is disabled "
+                    "(use_fov_head=False). Either provide f_px or enable "
+                    "the FOV head."
+                )
             f_px = 0.5 * W / torch.tan(0.5 * torch.deg2rad(fov_deg.to(torch.float)))
 
         inverse_depth = canonical_inverse_depth * (W / f_px)
@@ -175,23 +227,10 @@ class DepthProModel(VisionModule):
     output_modalities: list[Modality] = [Modality.DEPTH]
 
     def __init__(self, net: DepthPro):
-        """Initialise DepthProModel.
-
-        Args:
-            net: A pre-constructed ``DepthPro`` nn.Module instance.
-        """
         super().__init__()
         self.net = net
 
     def forward(self, **inputs: Any) -> dict[Modality, Any]:
-        """Run inference and return a depth map.
-
-        Args:
-            **inputs: Must contain key ``"rgb"`` with tensor value.
-
-        Returns:
-            ``{Modality.DEPTH: depth_tensor}``
-        """
         rgb: torch.Tensor = inputs[Modality.RGB.value]
         result = self.net.infer(rgb)
         return {Modality.DEPTH: result["depth"]}
@@ -231,20 +270,8 @@ class DepthProModel(VisionModule):
 
             model = DepthProModel.from_pretrained()
         """
-        try:
-            from huggingface_hub import hf_hub_download
-        except ImportError:
-            raise ImportError(
-                "DepthProModel.from_pretrained requires huggingface_hub.\n"
-                "Install it with:  pip install huggingface_hub"
-            )
-        try:
-            import timm
-        except ImportError:
-            raise ImportError(
-                "DepthProModel.from_pretrained requires timm.\n"
-                "Install it with:  pip install timm"
-            )
+        _require_package("huggingface_hub")
+        from huggingface_hub import hf_hub_download
 
         # --- Download checkpoint ---
         ckpt_path = hf_hub_download(
@@ -254,50 +281,12 @@ class DepthProModel(VisionModule):
         )
         state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=True)
 
-        # --- Build architecture matching the official training config ---
-        # ViT-L/16 as patch encoder (embed_dim=1024, 24 blocks)
-        patch_encoder = timm.create_model(
-            "vit_large_patch16_384",
-            pretrained=False,
-            num_classes=0,
-            img_size=384,
-        )
-        # ViT-B/16 as image encoder (embed_dim=768, 12 blocks)
-        image_encoder = timm.create_model(
-            "vit_base_patch16_384",
-            pretrained=False,
-            num_classes=0,
-            img_size=384,
-        )
-        encoder = DepthProEncoder(
-            dims_encoder=[256, 512, 1024, 1024],
-            patch_encoder=patch_encoder,
-            image_encoder=image_encoder,
-            hook_block_ids=[5, 11],      # ~1/4 and ~1/2 depth of ViT-L (24 blocks)
-            decoder_features=256,
-        )
-        decoder = MultiresConvDecoder(
-            dims_encoder=[256, 256, 512, 1024, 1024],
-            dim_decoder=256,
-        )
-        net = DepthPro(
-            encoder=encoder,
-            decoder=decoder,
-            last_dims=(32, 1),
-            use_fov_head=use_fov_head,
-        )
+        net = DepthPro.from_config(use_fov_head=use_fov_head)
 
         # --- Load weights ---
         # Checkpoint keys match the DepthPro module directly (same codebase).
-        missing, unexpected = net.load_state_dict(state_dict, strict=False)
-        if missing:
-            import warnings
-            shown = missing[:5]
-            warnings.warn(
-                f"DepthPro: {len(missing)} missing key(s) when loading pretrained "
-                f"weights (first 5): {shown}",
-                stacklevel=2,
-            )
+        missing, _ = net.load_state_dict(state_dict, strict=False)
+        _warn_missing_keys("DepthPro", missing)
 
         return cls(net=net)
 

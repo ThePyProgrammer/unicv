@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import math
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 import torch
 import torch.nn as nn
@@ -20,7 +22,7 @@ class DepthProEncoder(nn.Module):
         hook_block_ids: Iterable[int],
         decoder_features: int,
     ):
-        """Initialize DepthProEncoder.
+        """Initialise DepthProEncoder.
 
         The framework
             1. creates an image pyramid,
@@ -29,14 +31,11 @@ class DepthProEncoder(nn.Module):
             4. produces multi-resolution encodings.
 
         Args:
-        ----
-            img_size: Backbone image resolution.
             dims_encoder: Dimensions of the encoder at different layers.
             patch_encoder: Backbone used for patches.
             image_encoder: Backbone used for global image encoder.
             hook_block_ids: Hooks to obtain intermediate features for the patch encoder model.
             decoder_features: Number of feature output in the decoder.
-
         """
         super().__init__()
 
@@ -56,7 +55,7 @@ class DepthProEncoder(nn.Module):
             dim_in: int,
             dim_out: int,
             upsample_layers: int,
-            dim_int: Optional[int] = None,
+            dim_int: int | None = None,
         ) -> nn.Module:
             if dim_int is None:
                 dim_int = dim_out
@@ -125,6 +124,9 @@ class DepthProEncoder(nn.Module):
         )
 
         # Obtain intermediate outputs of the blocks.
+        self.backbone_highres_hook0: torch.Tensor | None = None
+        self.backbone_highres_hook1: torch.Tensor | None = None
+
         self.patch_encoder.blocks[self.hook_block_ids[0]].register_forward_hook(
             self._hook0
         )
@@ -132,10 +134,10 @@ class DepthProEncoder(nn.Module):
             self._hook1
         )
 
-    def _hook0(self, model, input, output):
+    def _hook0(self, model: nn.Module, input: tuple, output: torch.Tensor) -> None:
         self.backbone_highres_hook0 = output
 
-    def _hook1(self, model, input, output):
+    def _hook1(self, model: nn.Module, input: tuple, output: torch.Tensor) -> None:
         self.backbone_highres_hook1 = output
 
     @property
@@ -212,8 +214,8 @@ class DepthProEncoder(nn.Module):
         return output
 
     def reshape_feature(
-        self, embeddings: torch.Tensor, width, height, cls_token_offset=1
-    ):
+        self, embeddings: torch.Tensor, width: int, height: int, cls_token_offset: int = 1
+    ) -> torch.Tensor:
         """Discard class token and reshape 1D feature map to a 2D grid."""
         b, hw, c = embeddings.shape
 
@@ -229,13 +231,10 @@ class DepthProEncoder(nn.Module):
         """Encode input at multiple resolutions.
 
         Args:
-        ----
-            x (torch.Tensor): Input image.
+            x: Input image tensor.
 
         Returns:
-        -------
             Multi resolution encoded features.
-
         """
         batch_size = x.shape[0]
 
@@ -325,3 +324,6 @@ class DepthProEncoder(nn.Module):
             x1_features,
             x_global_features,
         ]
+
+
+__all__ = ["DepthProEncoder"]
