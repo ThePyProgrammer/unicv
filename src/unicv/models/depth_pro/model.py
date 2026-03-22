@@ -72,8 +72,10 @@ class DepthPro(nn.Module):
         # Initialise final bias to zero.
         self.head[4].bias.data.fill_(0)  # type: ignore[union-attr]
 
-        if use_fov_head:
-            self.fov = FOVNetwork(num_features=dim_decoder, fov_encoder=fov_encoder)
+        self.fov: FOVNetwork | None = (
+            FOVNetwork(num_features=dim_decoder, fov_encoder=fov_encoder)
+            if use_fov_head else None
+        )
 
     @classmethod
     def from_config(
@@ -146,7 +148,7 @@ class DepthPro(nn.Module):
         canonical_inverse_depth = self.head(features)
 
         fov_deg: torch.Tensor | None = None
-        if hasattr(self, "fov"):
+        if self.fov is not None:
             fov_deg = self.fov(x, features_0.detach())
 
         return canonical_inverse_depth, fov_deg

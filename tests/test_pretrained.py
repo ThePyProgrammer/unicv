@@ -145,10 +145,10 @@ class TestDepthProFromPretrained:
     # -- architecture options --
 
     def test_no_fov_head(self):
-        assert not hasattr(self._run(use_fov_head=False).net, "fov")
+        assert self._run(use_fov_head=False).net.fov is None
 
     def test_with_fov_head(self):
-        assert hasattr(self._run(use_fov_head=True).net, "fov")
+        assert self._run(use_fov_head=True).net.fov is not None
 
     def test_decoder_is_present(self):
         assert self._run().net.decoder is not None

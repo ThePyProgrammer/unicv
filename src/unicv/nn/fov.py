@@ -51,6 +51,7 @@ class FOVNetwork(nn.Module):
             nn.Conv2d(num_features // 8, 1, kernel_size=6, stride=1, padding=0),
         ]
 
+        self._has_encoder = fov_encoder is not None
         if fov_encoder is not None:
             self.encoder = nn.Sequential(
                 fov_encoder,
@@ -73,7 +74,7 @@ class FOVNetwork(nn.Module):
         Returns:
             FOV prediction per image, shape ``(B, 1, 1, 1)``.
         """
-        if hasattr(self, "encoder"):
+        if self._has_encoder:
             # Downsample the image to backbone resolution and encode.
             x = F.interpolate(
                 x,
