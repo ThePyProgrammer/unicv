@@ -12,3 +12,6 @@ class InputForm(str, Enum):
     SINGLE = "single"        # one tensor / object
     LIST = "list"            # unordered list
     TEMPORAL = "temporal"    # ordered sequence (time)
+
+
+__all__ = ["Modality", "InputForm"]

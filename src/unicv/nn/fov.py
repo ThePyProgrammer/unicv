@@ -6,7 +6,6 @@ Ported from apple/ml-depth-pro:
 
 from __future__ import annotations
 
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -26,9 +25,9 @@ class FOVNetwork(nn.Module):
     def __init__(
         self,
         num_features: int,
-        fov_encoder: Optional[nn.Module] = None,
+        fov_encoder: nn.Module | None = None,
     ):
-        """Initialize FOVNetwork.
+        """Initialise FOVNetwork.
 
         Args:
             num_features: Feature dimension ``D`` from the decoder.
@@ -72,7 +71,7 @@ class FOVNetwork(nn.Module):
                 shape ``(B, D, h, w)``.
 
         Returns:
-            Scalar FOV prediction per image, shape ``(B, 1)``.
+            FOV prediction per image, shape ``(B, 1, 1, 1)``.
         """
         if hasattr(self, "encoder"):
             # Downsample the image to backbone resolution and encode.

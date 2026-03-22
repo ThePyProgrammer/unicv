@@ -13,7 +13,6 @@ FeatureFusionBlocks.
 
 from __future__ import annotations
 
-from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -88,8 +87,8 @@ class FeatureFusionBlock(nn.Module):
         out_features = features // 2 if expand else features
 
         self.out_conv = nn.Conv2d(features, out_features, kernel_size=1, stride=1, padding=0, bias=True)
-        self.resConvUnit1 = ResidualConvUnit(features, use_bn)
-        self.resConvUnit2 = ResidualConvUnit(features, use_bn)
+        self.res_conv_unit1 = ResidualConvUnit(features, use_bn)
+        self.res_conv_unit2 = ResidualConvUnit(features, use_bn)
 
     def forward(self, *xs: torch.Tensor) -> torch.Tensor:
         """Fuse one or two feature maps and upsample.
@@ -104,8 +103,8 @@ class FeatureFusionBlock(nn.Module):
         """
         output = xs[0]
         if len(xs) == 2:
-            output = output + self.resConvUnit1(xs[1])
-        output = self.resConvUnit2(output)
+            output = output + self.res_conv_unit1(xs[1])
+        output = self.res_conv_unit2(output)
         output = F.interpolate(output, scale_factor=2, mode="bilinear", align_corners=self.align_corners)
         output = self.out_conv(output)
         return output
@@ -128,7 +127,7 @@ class Reassemble(nn.Module):
         out_channels: int,
         patch_size: int,
         img_size: int,
-        layer_scale: int,
+        layer_scale: int | float,
         num_register_tokens: int = 0,
     ):
         """Initialise Reassemble.
@@ -217,7 +216,7 @@ class DPTDecoder(nn.Module):
         num_layers: int = 4,
         patch_size: int = 16,
         img_size: int = 518,
-        layer_scales: Optional[List[int]] = None,
+        layer_scales: list[int | float] | None = None,
         use_bn: bool = False,
         num_register_tokens: int = 0,
         out_channels: int = 1,
@@ -240,9 +239,10 @@ class DPTDecoder(nn.Module):
         if layer_scales is None:
             layer_scales = self.DEFAULT_LAYER_SCALES[:num_layers]
 
-        assert len(layer_scales) == num_layers, (
-            f"Expected {num_layers} layer_scales, got {len(layer_scales)}"
-        )
+        if len(layer_scales) != num_layers:
+            raise ValueError(
+                f"Expected {num_layers} layer_scales, got {len(layer_scales)}"
+            )
 
         # Reassemble blocks: one per hooked encoder layer.
         self.reassemble_blocks = nn.ModuleList([
@@ -271,7 +271,7 @@ class DPTDecoder(nn.Module):
             nn.ReLU(True),
         )
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
+    def forward(self, hidden_states: list[torch.Tensor]) -> torch.Tensor:
         """Decode multi-scale hidden states into a dense prediction.
 
         Args:
@@ -282,10 +282,11 @@ class DPTDecoder(nn.Module):
         Returns:
             Dense prediction map; shape depends on head configuration.
         """
-        assert len(hidden_states) == len(self.reassemble_blocks), (
-            f"Expected {len(self.reassemble_blocks)} hidden states, "
-            f"got {len(hidden_states)}"
-        )
+        if len(hidden_states) != len(self.reassemble_blocks):
+            raise ValueError(
+                f"Expected {len(self.reassemble_blocks)} hidden states, "
+                f"got {len(hidden_states)}"
+            )
 
         # Reassemble each level into a spatial feature map.
         features = [rb(h) for rb, h in zip(self.reassemble_blocks, hidden_states)]

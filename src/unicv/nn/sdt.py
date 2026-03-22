@@ -22,7 +22,6 @@ For each scale level the SDT:
 from __future__ import annotations
 
 import math
-from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -152,7 +151,7 @@ class SDTHead(nn.Module):
             nn.ReLU(True),
         )
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
+    def forward(self, hidden_states: list[torch.Tensor]) -> torch.Tensor:
         """Decode multi-scale ViT hidden states into a dense depth map.
 
         Args:
@@ -164,9 +163,10 @@ class SDTHead(nn.Module):
             Predicted depth / inverse-depth map at the input resolution,
             shape ``(B, out_channels, H, W)``.
         """
-        assert len(hidden_states) == self.num_levels, (
-            f"Expected {self.num_levels} hidden states, got {len(hidden_states)}"
-        )
+        if len(hidden_states) != self.num_levels:
+            raise ValueError(
+                f"Expected {self.num_levels} hidden states, got {len(hidden_states)}"
+            )
 
         # Step 1 – project each level to a spatial feature map.
         spatial: list[torch.Tensor] = [

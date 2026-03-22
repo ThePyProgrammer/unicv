@@ -24,7 +24,7 @@ class ResidualBlock(nn.Module):
     """
 
     def __init__(self, residual: nn.Module, shortcut: nn.Module | None = None) -> None:
-        """Initialize ResidualBlock."""
+        """Initialise ResidualBlock."""
         super().__init__()
         self.residual = residual
         self.shortcut = shortcut
@@ -46,7 +46,7 @@ class FeatureFusionBlock2d(nn.Module):
         deconv: bool = False,
         batch_norm: bool = False,
     ):
-        """Initialize FeatureFusionBlock2d.
+        """Initialise FeatureFusionBlock2d.
 
         Args:
             num_features: Input and output channel dimensions.
@@ -135,7 +135,7 @@ class MultiresConvDecoder(nn.Module):
         dims_encoder: Iterable[int],
         dim_decoder: int,
     ):
-        """Initialize MultiresConvDecoder.
+        """Initialise MultiresConvDecoder.
 
         Args:
             dims_encoder: Channel dimensions at each encoder level (finest first).
