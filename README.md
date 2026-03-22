@@ -59,7 +59,7 @@ model  = DepthAnything3Model.from_pretrained(variant="vit_l")
 result = model(rgb=image_tensor)   # {Modality.DEPTH: (B, 1, H, W)}
 ```
 
-Every model follows the same interface — only `input_spec` and `output_modalities` differ. See the [Getting Started guide](docs/getting-started.md) for all models.
+Every model follows the same interface — only `input_spec` and `output_modalities` differ. See the [Getting Started guide](https://thepyprogrammer.github.io/unicv/getting-started/) for all models.
 
 ---
 
@@ -73,24 +73,26 @@ Every model follows the same interface — only `input_spec` and `output_modalit
 | [SHARP](https://apple.github.io/ml-sharp/) | Apple, 2024 | RGB → Splat | `SHARPModel.from_pretrained()` |
 | [SimpleRecon](https://nianticlabs.github.io/simplerecon/) | Niantic, 2022 | RGB (temporal) → Depth | -- |
 
-See the [full model catalogue](docs/models/catalogue.md) for planned models.
+See the [full model catalogue](https://thepyprogrammer.github.io/unicv/models/catalogue/) for planned models.
 
 ---
 
 ## Documentation
 
+**[Read the full documentation →](https://thepyprogrammer.github.io/unicv/)**
+
 | Document | Description |
 |----------|-------------|
-| [Getting Started](docs/getting-started.md) | Installation, usage, pretrained weights |
-| [VisionModule Interface](docs/vision-module.md) | The core abstraction in detail |
-| [Building Blocks](docs/nn/overview.md) | Shared decoders, heads, geometry utilities |
+| [Getting Started](https://thepyprogrammer.github.io/unicv/getting-started/) | Installation, usage, pretrained weights |
+| [VisionModule Interface](https://thepyprogrammer.github.io/unicv/vision-module/) | The core abstraction in detail |
+| [Building Blocks](https://thepyprogrammer.github.io/unicv/nn/overview/) | Shared decoders, heads, geometry utilities |
 | [Architecture](ARCHITECTURE.md) | High-level codebase map |
 | **Model Guides** | |
-| [DepthPro](docs/models/depth-pro.md) | Multi-scale patch-pyramid encoder walkthrough |
-| [Depth Anything 3](docs/models/depth-anything-3.md) | DINOv2 + DPT decoder walkthrough |
-| [Camera Depth Model](docs/models/cdm.md) | Dual-ViT fusion walkthrough |
-| [SHARP](docs/models/sharp.md) | Single-image Gaussian splat walkthrough |
-| [SimpleRecon](docs/models/simple-recon.md) | Plane-sweep stereo walkthrough |
+| [DepthPro](https://thepyprogrammer.github.io/unicv/models/depth-pro/) | Multi-scale patch-pyramid encoder walkthrough |
+| [Depth Anything 3](https://thepyprogrammer.github.io/unicv/models/depth-anything-3/) | DINOv2 + DPT decoder walkthrough |
+| [Camera Depth Model](https://thepyprogrammer.github.io/unicv/models/cdm/) | Dual-ViT fusion walkthrough |
+| [SHARP](https://thepyprogrammer.github.io/unicv/models/sharp/) | Single-image Gaussian splat walkthrough |
+| [SimpleRecon](https://thepyprogrammer.github.io/unicv/models/simple-recon/) | Plane-sweep stereo walkthrough |
 
 ---
 

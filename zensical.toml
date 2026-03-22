@@ -1,0 +1,30 @@
+[project]
+site_name = "UniCV"
+site_url = "https://thepyprogrammer.github.io/unicv/"
+site_description = "Unified deep learning models for Computer Vision"
+site_author = "Prannaya Gupta"
+copyright = "&copy; 2025 Prannaya Gupta"
+
+nav = [
+  {"Home" = "index.md"},
+  {"Getting Started" = "getting-started.md"},
+  {"VisionModule Interface" = "vision-module.md"},
+  {"Building Blocks" = [
+    {"Overview" = "nn/overview.md"},
+  ]},
+  {"Models" = [
+    {"DepthPro" = "models/depth-pro.md"},
+    {"Depth Anything 3" = "models/depth-anything-3.md"},
+    {"Camera Depth Model" = "models/cdm.md"},
+    {"SHARP" = "models/sharp.md"},
+    {"SimpleRecon" = "models/simple-recon.md"},
+    {"Model Catalogue" = "models/catalogue.md"},
+  ]},
+]
+
+[project.theme]
+variant = "modern"
+
+[project.extra]
+repo_url = "https://github.com/ThePyProgrammer/unicv"
+repo_name = "aether-raid/unicv"
