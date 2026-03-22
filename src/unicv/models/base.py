@@ -1,26 +1,84 @@
 from abc import ABC, abstractmethod
 from typing import Any
+import warnings
 
 from unicv.utils.types import Modality, InputForm
 
 
-class VisionModule(ABC):
+def _require_package(name: str, pip_name: str | None = None) -> None:
+    """Import *name* or raise ImportError with install instructions."""
+    import importlib
+    try:
+        importlib.import_module(name)
+    except ImportError as e:
+        install = pip_name or name
+        raise ImportError(
+            f"This operation requires {name}.\n"
+            f"Install it with:  pip install {install}"
+        ) from e
+
+
+def _remap_dpt_key(key: str) -> str | None:
+    """Remap a single official DPT checkpoint key to unicv naming.
+
+    Returns the remapped key, or ``None`` if the key does not match any known
+    DPT pattern and should be handled by the caller.
     """
-    Abstract base class for any-to-any vision algorithms.
+    if key.startswith("depth_head.projects."):
+        rest = key[len("depth_head.projects."):]
+        idx, _, tail = rest.partition(".")
+        return f"decoder.reassemble_blocks.{idx}.project.{tail}"
+
+    if key.startswith("depth_head.resize_layers."):
+        rest = key[len("depth_head.resize_layers."):]
+        idx, _, tail = rest.partition(".")
+        return f"decoder.reassemble_blocks.{idx}.resample.{tail}"
+
+    if key.startswith("depth_head.scratch.refinenet"):
+        rest = key[len("depth_head.scratch.refinenet"):]
+        n_str, _, tail = rest.partition(".")
+        i = 4 - int(n_str)
+        tail = tail.replace("resConfUnit", "res_conv_unit")
+        return f"decoder.fusion_blocks.{i}.{tail}"
+
+    if key.startswith("depth_head.scratch.output_conv1."):
+        tail = key[len("depth_head.scratch.output_conv1."):]
+        return f"decoder.head.0.{tail}"
+
+    if key.startswith("depth_head.scratch.output_conv2."):
+        tail = key[len("depth_head.scratch.output_conv2."):]
+        return f"decoder.head.2.{tail}"
+
+    return None
+
+
+def _warn_missing_keys(
+    model_label: str, missing: list[str], *, limit: int = 5
+) -> None:
+    """Emit a UserWarning listing the first *limit* missing state-dict keys."""
+    if missing:
+        shown = missing[:limit]
+        warnings.warn(
+            f"{model_label}: {len(missing)} missing key(s) when loading "
+            f"pretrained weights (showing {len(shown)}): {shown}",
+            stacklevel=3,
+        )
+
+
+class VisionModule(ABC):
+    """Abstract base class for any-to-any vision algorithms.
 
     Subclasses define:
-    - input_spec: Dict[Modality, InputForm]
-    - output_modalities: List[Modality]
+    - ``input_spec: dict[Modality, InputForm]``
+    - ``output_modalities: list[Modality]``
     """
 
-    # ---- REQUIRED CLASS ATTRIBUTES ----
     input_spec: dict[Modality, InputForm] = {}
     output_modalities: list[Modality] = []
 
     def __init__(self):
         self._validate_class_definition()
 
-    # ---- VALIDATION ----
     def _validate_class_definition(self):
         if not self.input_spec:
             raise ValueError(
@@ -37,7 +95,6 @@ class VisionModule(ABC):
             if not isinstance(modality, Modality):
                 raise TypeError(f"Invalid output modality: {modality}")
 
-    # ---- PUBLIC API ----
     def __call__(self, **kwargs) -> dict[Modality, Any]:
         """
         Parse kwargs according to input_spec and dispatch to forward().
@@ -46,7 +103,6 @@ class VisionModule(ABC):
         outputs = self.forward(**parsed_inputs)
         return self._validate_outputs(outputs)
 
-    # ---- INPUT PARSING ----
     def _parse_inputs(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         parsed: dict[str, Any] = {}
 
@@ -64,17 +120,10 @@ class VisionModule(ABC):
             if form == InputForm.SINGLE:
                 parsed[key] = value
 
-            elif form == InputForm.LIST:
+            elif form in (InputForm.LIST, InputForm.TEMPORAL):
                 if not isinstance(value, (list, tuple)):
                     raise TypeError(
-                        f"Expected list/tuple for modality '{key}'"
-                    )
-                parsed[key] = list(value)
-
-            elif form == InputForm.TEMPORAL:
-                if not isinstance(value, (list, tuple)):
-                    raise TypeError(
-                        f"Expected temporal sequence (list/tuple) for '{key}'"
+                        f"Expected {form.value} (list/tuple) for '{key}'"
                     )
                 parsed[key] = list(value)
 
@@ -83,7 +132,6 @@ class VisionModule(ABC):
 
         return parsed
 
-    # ---- OUTPUT VALIDATION ----
     def _validate_outputs(
         self, outputs: dict[Modality, Any]
     ) -> dict[Modality, Any]:
@@ -110,12 +158,18 @@ class VisionModule(ABC):
 
         return normalized
 
-    # ---- CORE COMPUTATION ----
     @abstractmethod
-    def forward(self, **inputs) -> dict[Modality, Any]:
-        """
-        Subclasses implement actual logic here.
+    def forward(self, **inputs: Any) -> dict[Modality, Any]:
+        """Subclasses implement actual logic here.
 
         Inputs are already validated and normalized.
         """
         pass
+
+
+__all__ = [
+    "VisionModule",
+    "_remap_dpt_key",
+    "_require_package",
+    "_warn_missing_keys",
+]
