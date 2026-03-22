@@ -9,6 +9,6 @@ for heterogeneous computer vision tasks.
 
 from unicv import models, nn, utils
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 __all__ = ["models", "nn", "utils", "__version__"]
