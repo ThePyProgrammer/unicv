@@ -172,6 +172,10 @@ class DepthPro(nn.Module):
         Returns:
             Dict with keys ``"depth"`` (metric depth in metres) and
             ``"focallength_px"``.
+
+        Raises:
+            ValueError: If the FOV head is disabled and ``f_px`` is not
+                provided.
         """
         if x.dim() == 3:
             x = x.unsqueeze(0)

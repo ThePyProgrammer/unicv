@@ -81,8 +81,8 @@ class DINOv2Backbone(nn.Module):
                 self._make_hook(layer_id)
             )
 
-    def _make_hook(self, layer_id: int):
-        def _hook(module, input, output):
+    def _make_hook(self, layer_id: int) -> callable:
+        def _hook(module: nn.Module, input: tuple, output: torch.Tensor) -> None:
             self._features[layer_id] = output
         return _hook
 

@@ -1,3 +1,5 @@
+"""Modality and InputForm enums used throughout unicv."""
+
 from enum import Enum
 
 class Modality(str, Enum):

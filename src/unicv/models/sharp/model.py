@@ -226,26 +226,9 @@ class SHARPModel(VisionModule):
 
         The official checkpoint stores a ``RGBGaussianPredictor`` whose encoder
         is DepthPro-based (``SlidingPyramidNetwork`` + ``TimmViT``), not DINOv2.
-        The following partial remappings are applied where shapes align:
-
-        * ``gaussian_decoder.fusions.{i}.resnet1.residual.1.*``
-          → ``feature_decoder.fusion_blocks.{i}.res_conv_unit1.conv1.*``
-        * ``gaussian_decoder.fusions.{i}.resnet1.residual.3.*``
-          → ``feature_decoder.fusion_blocks.{i}.res_conv_unit1.conv2.*``
-        * ``gaussian_decoder.fusions.{i}.resnet2.residual.1.*``
-          → ``feature_decoder.fusion_blocks.{i}.res_conv_unit2.conv1.*``
-        * ``gaussian_decoder.fusions.{i}.resnet2.residual.3.*``
-          → ``feature_decoder.fusion_blocks.{i}.res_conv_unit2.conv2.*``
-        * ``gaussian_decoder.fusions.{i}.out_conv.*``
-          → ``feature_decoder.fusion_blocks.{i}.out_conv.*``
-        * ``prediction_head.geometry_prediction_head.*``
-          → ``gaussian_head.xyz_head.*``  *(shape-filtered)*
-
-        Any remapped key whose tensor shape does not match the model parameter
-        is silently dropped before ``load_state_dict`` to prevent
-        ``RuntimeError`` on shape mismatches.  ``strict=False`` is used so
-        that unrecognised checkpoint keys are ignored.  A ``UserWarning`` is
-        issued listing the first few missing keys.
+        Checkpoint keys are partially remapped where shapes align; see the
+        source for the full mapping.  Shape-mismatched keys are silently
+        dropped and unrecognised keys are ignored via ``strict=False``.
 
         Args:
             sh_degree:  Spherical-harmonic degree for the colour head (0–3).

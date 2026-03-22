@@ -1,3 +1,5 @@
+"""DepthPro multi-scale patch-pyramid encoder."""
+
 from __future__ import annotations
 
 import math
