@@ -26,13 +26,13 @@ VisionModule spec
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from unicv.models.base import VisionModule
+from unicv.models.base import VisionModule, _remap_dpt_key, _require_package, _warn_missing_keys
 from unicv.nn.dpt import DPTDecoder
 from unicv.utils.types import InputForm, Modality
 
@@ -133,8 +133,8 @@ class CDM(nn.Module):
         """
         depth_3ch: torch.Tensor = self.depth_proj(depth)   # (B, 3, H, W)
 
-        rgb_states:   List[torch.Tensor] = self.rgb_backbone(rgb)
-        depth_states: List[torch.Tensor] = self.depth_backbone(depth_3ch)
+        rgb_states:   list[torch.Tensor] = self.rgb_backbone(rgb)
+        depth_states: list[torch.Tensor] = self.depth_backbone(depth_3ch)
 
         fused = [
             fusion(r, d)
@@ -176,8 +176,7 @@ class CDM(nn.Module):
         Returns:
             Initialised ``CDM`` model.
         """
-        # Import here to avoid a hard dependency at module level.
-        from unicv.models.depth_anything_3.model import DINOv2Backbone
+        from unicv.nn.dinov2 import DINOv2Backbone
 
         rgb_backbone   = DINOv2Backbone(variant, pretrained, num_register_tokens=num_register_tokens)
         depth_backbone = DINOv2Backbone(variant, pretrained, num_register_tokens=num_register_tokens)
@@ -224,23 +223,10 @@ class CameraDepthModel(VisionModule):
     output_modalities: list[Modality] = [Modality.DEPTH]
 
     def __init__(self, net: CDM) -> None:
-        """Initialise CameraDepthModel.
-
-        Args:
-            net: A pre-constructed ``CDM`` instance.
-        """
         super().__init__()
         self.net = net
 
     def forward(self, **inputs: Any) -> dict[Modality, Any]:
-        """Run depth refinement.
-
-        Args:
-            **inputs: Must contain keys ``"rgb"`` and ``"depth"``.
-
-        Returns:
-            ``{Modality.DEPTH: depth_tensor}``
-        """
         rgb:   torch.Tensor = inputs[Modality.RGB.value]
         depth: torch.Tensor = inputs[Modality.DEPTH.value]
         out = self.net(rgb, depth)
@@ -250,8 +236,8 @@ class CameraDepthModel(VisionModule):
     def from_pretrained(
         cls,
         camera: str = "d405",
-        features: int = 256,
         img_size: int = 518,
+        features: int = 256,
         cache_dir: str | None = None,
     ) -> "CameraDepthModel":
         """Load official Camera Depth Model pretrained weights.
@@ -273,35 +259,17 @@ class CameraDepthModel(VisionModule):
         ``"kinect"``  ``depth-anything/camera-depth-model-kinect``
         ============  =====================================================
 
-        Key mapping applied before loading
-        -----------------------------------
-        The official CDM checkpoints store the DINOv2 backbone and DPT
-        decoder under a naming convention compatible with the Depth Anything
-        training code.  The following remappings are applied:
+        Checkpoint keys are remapped from the official naming convention;
+        see the source for the full mapping.  Unrecognised keys are silently
+        ignored via ``strict=False``.
 
-        * ``pretrained.*`` or ``rgb_encoder.*``  → ``rgb_backbone.model.*``
-        * ``depth_encoder.*``                    → ``depth_backbone.model.*``
-        * ``depth_proj.*``                       → ``depth_proj.*``  (unchanged)
-        * ``fusion_layers.*``                    → ``fusion_layers.*``  (unchanged)
-        * ``depth_head.projects.{i}.*``          → ``decoder.reassemble_blocks.{i}.project.*``
-        * ``depth_head.resize_layers.{i}.*``     → ``decoder.reassemble_blocks.{i}.resample.*``
-        * ``depth_head.scratch.refinenet{n}.*``  → ``decoder.fusion_blocks.{4-n}.*``
-          (with ``resConfUnit`` renamed to ``resConvUnit``)
-        * ``depth_head.scratch.output_conv1.*``  → ``decoder.head.0.*``
-        * ``depth_head.scratch.output_conv2.*``  → ``decoder.head.2.*``
-
-        ``strict=False`` is used so that unrecognised checkpoint keys are
-        silently ignored.
-
-        Requirements
-        ------------
-        ``pip install huggingface_hub``
+        Requirements: ``pip install huggingface_hub``
 
         Args:
             camera:    Depth-camera variant.  One of
                        ``"d405"``, ``"d435"``, ``"l515"``, ``"kinect"``.
-            features:  Decoder channel width (default 256).
             img_size:  Square input resolution (default 518).
+            features:  Decoder channel width (default 256).
             cache_dir: Optional Hugging Face cache directory.
 
         Returns:
@@ -311,13 +279,8 @@ class CameraDepthModel(VisionModule):
 
             model = CameraDepthModel.from_pretrained("d405")
         """
-        try:
-            from huggingface_hub import hf_hub_download
-        except ImportError:
-            raise ImportError(
-                "CameraDepthModel.from_pretrained requires huggingface_hub.\n"
-                "Install it with:  pip install huggingface_hub"
-            )
+        _require_package("huggingface_hub")
+        from huggingface_hub import hf_hub_download
 
         _VALID_CAMERAS = {"d405", "d435", "l515", "kinect"}
         if camera not in _VALID_CAMERAS:
@@ -357,46 +320,16 @@ class CameraDepthModel(VisionModule):
             elif new_key.startswith("depth_encoder."):
                 new_key = "depth_backbone.model." + new_key[len("depth_encoder."):]
 
-            # --- Reassemble: project conv ---
-            elif new_key.startswith("depth_head.projects."):
-                rest = new_key[len("depth_head.projects."):]
-                idx, _, tail = rest.partition(".")
-                new_key = f"decoder.reassemble_blocks.{idx}.project.{tail}"
-
-            # --- Reassemble: spatial resample ---
-            elif new_key.startswith("depth_head.resize_layers."):
-                rest = new_key[len("depth_head.resize_layers."):]
-                idx, _, tail = rest.partition(".")
-                new_key = f"decoder.reassemble_blocks.{idx}.resample.{tail}"
-
-            # --- Fusion blocks (reverse-indexed in official checkpoints) ---
-            elif new_key.startswith("depth_head.scratch.refinenet"):
-                rest = new_key[len("depth_head.scratch.refinenet"):]
-                n_str, _, tail = rest.partition(".")
-                i = 4 - int(n_str)        # refinenet4→0, refinenet3→1, …
-                tail = tail.replace("resConfUnit", "resConvUnit")
-                new_key = f"decoder.fusion_blocks.{i}.{tail}"
-
-            elif new_key.startswith("depth_head.scratch.output_conv1."):
-                tail = new_key[len("depth_head.scratch.output_conv1."):]
-                new_key = f"decoder.head.0.{tail}"
-
-            elif new_key.startswith("depth_head.scratch.output_conv2."):
-                tail = new_key[len("depth_head.scratch.output_conv2."):]
-                new_key = f"decoder.head.2.{tail}"
+            else:
+                dpt_key = _remap_dpt_key(new_key)
+                if dpt_key is not None:
+                    new_key = dpt_key
 
             # depth_proj.*, fusion_layers.*, decoder.* — pass through unchanged.
             remapped[new_key] = val
 
         missing, _ = net.load_state_dict(remapped, strict=False)
-        if missing:
-            import warnings
-            shown = missing[:5]
-            warnings.warn(
-                f"CameraDepthModel ({camera}): {len(missing)} missing key(s) when "
-                f"loading pretrained weights (first 5): {shown}",
-                stacklevel=2,
-            )
+        _warn_missing_keys(f"CameraDepthModel ({camera})", missing)
 
         return cls(net=net)
 

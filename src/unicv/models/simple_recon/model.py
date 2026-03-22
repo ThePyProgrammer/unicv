@@ -34,7 +34,7 @@ VisionModule spec
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -42,6 +42,7 @@ import torch.nn.functional as F
 
 from unicv.models.base import VisionModule
 from unicv.nn.cost_volume import PlaneSweepCostVolume
+from unicv.nn.geometry import default_intrinsics
 from unicv.utils.types import InputForm, Modality
 
 
@@ -158,10 +159,10 @@ class SimpleRecon(nn.Module):
 
     def forward(
         self,
-        frames: List[torch.Tensor],
+        frames: list[torch.Tensor],
         intrinsics: torch.Tensor,
-        src_intrinsics: List[torch.Tensor],
-        src_poses: List[torch.Tensor],
+        src_intrinsics: list[torch.Tensor],
+        src_poses: list[torch.Tensor],
     ) -> torch.Tensor:
         """Estimate a depth map for the reference (first) frame.
 
@@ -239,17 +240,6 @@ class SimpleRecon(nn.Module):
 # VisionModule wrapper
 # ---------------------------------------------------------------------------
 
-def _default_intrinsics(B: int, H: int, W: int, device: torch.device) -> torch.Tensor:
-    """Build a plausible pinhole intrinsics matrix from image dimensions."""
-    K = torch.eye(3, device=device).unsqueeze(0).expand(B, -1, -1).clone()
-    f = float(max(H, W))
-    K[:, 0, 0] = f
-    K[:, 1, 1] = f
-    K[:, 0, 2] = W / 2.0
-    K[:, 1, 2] = H / 2.0
-    return K
-
-
 class SimpleReconModel(VisionModule):
     """UniCV ``VisionModule`` wrapper around ``SimpleRecon``.
 
@@ -271,29 +261,16 @@ class SimpleReconModel(VisionModule):
     output_modalities: list[Modality] = [Modality.DEPTH]
 
     def __init__(self, net: SimpleRecon) -> None:
-        """Initialise SimpleReconModel.
-
-        Args:
-            net: Pre-constructed ``SimpleRecon`` instance.
-        """
         super().__init__()
         self.net = net
 
     def forward(self, **inputs: Any) -> dict[Modality, Any]:
-        """Run depth estimation with default identity camera parameters.
-
-        Args:
-            **inputs: Must contain key ``"rgb"`` with a list of frame tensors.
-
-        Returns:
-            ``{Modality.DEPTH: depth_tensor}``
-        """
-        frames: List[torch.Tensor] = inputs[Modality.RGB.value]
+        frames: list[torch.Tensor] = inputs[Modality.RGB.value]
         B, _, H, W = frames[0].shape
         device = frames[0].device
 
         # Build default identity camera parameters.
-        K    = _default_intrinsics(B, H, W, device)
+        K    = default_intrinsics(B, H, W, device)
         T_id = torch.eye(4, device=device).unsqueeze(0).expand(B, -1, -1).clone()
 
         n_src = len(frames) - 1

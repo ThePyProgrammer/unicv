@@ -38,15 +38,15 @@ invoke ``SHARP.forward()`` directly with calibrated intrinsics.
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from unicv.models.base import VisionModule
+from unicv.models.base import VisionModule, _warn_missing_keys
 from unicv.nn.gaussian import GaussianHead
-from unicv.nn.geometry import backproject_depth
+from unicv.nn.geometry import backproject_depth, default_intrinsics
 from unicv.nn.dpt import DPTDecoder
 from unicv.utils.structs import GaussianCloud
 from unicv.utils.types import InputForm, Modality
@@ -108,7 +108,7 @@ class SHARP(nn.Module):
         B, _, H, W = rgb.shape
 
         # --- Encode + decode to dense feature map ---
-        hidden_states: List[torch.Tensor] = self.backbone(rgb)
+        hidden_states: list[torch.Tensor] = self.backbone(rgb)
         feat_map: torch.Tensor            = self.feature_decoder(hidden_states)  # (B, F, H', W')
 
         if feat_map.shape[-2:] != (H, W):
@@ -120,15 +120,7 @@ class SHARP(nn.Module):
         # --- Depth → 3-D positions via backprojection ---
         depth: torch.Tensor = self.depth_head(feat_map)   # (B, 1, H, W)
 
-        if intrinsics is None:
-            f  = float(max(H, W))
-            K  = torch.eye(3, device=rgb.device).unsqueeze(0).expand(B, -1, -1).clone()
-            K[:, 0, 0] = f
-            K[:, 1, 1] = f
-            K[:, 0, 2] = W / 2.0
-            K[:, 1, 2] = H / 2.0
-        else:
-            K = intrinsics
+        K = default_intrinsics(B, H, W, rgb.device) if intrinsics is None else intrinsics
 
         pts = backproject_depth(depth, K)       # (B, H, W, 3)
         xyz = pts.reshape(B, H * W, 3)          # (B, N, 3)
@@ -168,7 +160,7 @@ class SHARP(nn.Module):
         Returns:
             Initialised ``SHARP`` model.
         """
-        from unicv.models.depth_anything_3.model import DINOv2Backbone
+        from unicv.nn.dinov2 import DINOv2Backbone
 
         backbone   = DINOv2Backbone(variant, pretrained, num_register_tokens=num_register_tokens)
         embed_dim  = backbone.embed_dim
@@ -210,23 +202,10 @@ class SHARPModel(VisionModule):
     output_modalities: list[Modality] = [Modality.SPLAT]
 
     def __init__(self, net: SHARP) -> None:
-        """Initialise SHARPModel.
-
-        Args:
-            net: A pre-constructed ``SHARP`` instance.
-        """
         super().__init__()
         self.net = net
 
     def forward(self, **inputs: Any) -> dict[Modality, Any]:
-        """Run Gaussian-splat prediction with default intrinsics.
-
-        Args:
-            **inputs: Must contain key ``"rgb"`` with a tensor value.
-
-        Returns:
-            ``{Modality.SPLAT: GaussianCloud}``
-        """
         rgb: torch.Tensor = inputs[Modality.RGB.value]
         cloud = self.net(rgb)   # intrinsics=None → default estimate
         return {Modality.SPLAT: cloud}
@@ -236,8 +215,8 @@ class SHARPModel(VisionModule):
     def from_pretrained(
         cls,
         sh_degree: int = 0,
-        features: int = 256,
         img_size: int = 518,
+        features: int = 256,
         cache_dir: str | None = None,
     ) -> "SHARPModel":
         """Load the official Apple SHARP pretrained weights.
@@ -250,13 +229,13 @@ class SHARPModel(VisionModule):
         The following partial remappings are applied where shapes align:
 
         * ``gaussian_decoder.fusions.{i}.resnet1.residual.1.*``
-          → ``feature_decoder.fusion_blocks.{i}.resConvUnit1.conv1.*``
+          → ``feature_decoder.fusion_blocks.{i}.res_conv_unit1.conv1.*``
         * ``gaussian_decoder.fusions.{i}.resnet1.residual.3.*``
-          → ``feature_decoder.fusion_blocks.{i}.resConvUnit1.conv2.*``
+          → ``feature_decoder.fusion_blocks.{i}.res_conv_unit1.conv2.*``
         * ``gaussian_decoder.fusions.{i}.resnet2.residual.1.*``
-          → ``feature_decoder.fusion_blocks.{i}.resConvUnit2.conv1.*``
+          → ``feature_decoder.fusion_blocks.{i}.res_conv_unit2.conv1.*``
         * ``gaussian_decoder.fusions.{i}.resnet2.residual.3.*``
-          → ``feature_decoder.fusion_blocks.{i}.resConvUnit2.conv2.*``
+          → ``feature_decoder.fusion_blocks.{i}.res_conv_unit2.conv2.*``
         * ``gaussian_decoder.fusions.{i}.out_conv.*``
           → ``feature_decoder.fusion_blocks.{i}.out_conv.*``
         * ``prediction_head.geometry_prediction_head.*``
@@ -270,9 +249,9 @@ class SHARPModel(VisionModule):
 
         Args:
             sh_degree:  Spherical-harmonic degree for the colour head (0–3).
-            features:   Decoder channel width (default 256).
             img_size:   Square input resolution passed to the decoder
                         (default 518).
+            features:   Decoder channel width (default 256).
             cache_dir:  Directory for the downloaded checkpoint.  Defaults to
                         the PyTorch hub cache
                         (``~/.cache/torch/hub/checkpoints``).
@@ -312,29 +291,29 @@ class SHARPModel(VisionModule):
             new_key: str | None = None
 
             # gaussian_decoder.fusions.{i}.resnet{1,2}.residual.{1,3}.*
-            #   → feature_decoder.fusion_blocks.{i}.resConvUnit{1,2}.conv{1,2}.*
+            #   → feature_decoder.fusion_blocks.{i}.res_conv_unit{1,2}.conv{1,2}.*
             if key.startswith("gaussian_decoder.fusions."):
                 rest         = key[len("gaussian_decoder.fusions."):]
                 idx, _, tail = rest.partition(".")
                 if tail.startswith("resnet1.residual.1."):
                     new_key = (
                         f"feature_decoder.fusion_blocks.{idx}"
-                        f".resConvUnit1.conv1.{tail[len('resnet1.residual.1.'):]}"
+                        f".res_conv_unit1.conv1.{tail[len('resnet1.residual.1.'):]}"
                     )
                 elif tail.startswith("resnet1.residual.3."):
                     new_key = (
                         f"feature_decoder.fusion_blocks.{idx}"
-                        f".resConvUnit1.conv2.{tail[len('resnet1.residual.3.'):]}"
+                        f".res_conv_unit1.conv2.{tail[len('resnet1.residual.3.'):]}"
                     )
                 elif tail.startswith("resnet2.residual.1."):
                     new_key = (
                         f"feature_decoder.fusion_blocks.{idx}"
-                        f".resConvUnit2.conv1.{tail[len('resnet2.residual.1.'):]}"
+                        f".res_conv_unit2.conv1.{tail[len('resnet2.residual.1.'):]}"
                     )
                 elif tail.startswith("resnet2.residual.3."):
                     new_key = (
                         f"feature_decoder.fusion_blocks.{idx}"
-                        f".resConvUnit2.conv2.{tail[len('resnet2.residual.3.'):]}"
+                        f".res_conv_unit2.conv2.{tail[len('resnet2.residual.3.'):]}"
                     )
                 elif tail.startswith("out_conv."):
                     new_key = (
@@ -364,18 +343,7 @@ class SHARPModel(VisionModule):
         }
 
         missing, _ = net.load_state_dict(safe, strict=False)
-        if missing:
-            import warnings
-            shown = missing[:5]
-            warnings.warn(
-                f"SHARPModel: {len(missing)} missing key(s) when loading "
-                f"pretrained weights (first 5): {shown}. "
-                "Note: the official SHARP checkpoint uses a DepthPro-based "
-                "encoder rather than DINOv2; backbone and reassemble-block "
-                "weights are not transferable without an architectural "
-                "realignment with the official RGBGaussianPredictor.",
-                stacklevel=2,
-            )
+        _warn_missing_keys("SHARPModel", missing)
 
         return cls(net=net)
 

@@ -16,111 +16,16 @@ Architecture
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from unicv.models.base import VisionModule
+from unicv.models.base import VisionModule, _remap_dpt_key, _require_package, _warn_missing_keys
+from unicv.nn.dinov2 import DINOv2Backbone
 from unicv.nn.dpt import DPTDecoder
 from unicv.utils.types import InputForm, Modality
-
-
-# ---------------------------------------------------------------------------
-# DINOv2 backbone wrapper
-# ---------------------------------------------------------------------------
-
-class DINOv2Backbone(nn.Module):
-    """Thin wrapper around a ``torch.hub`` DINOv2 model.
-
-    Returns the intermediate hidden states from a configurable set of
-    transformer layers so that the DPT decoder can reassemble them.
-    """
-
-    # Map config name → hub model name.
-    _HUB_NAMES = {
-        "vit_s": "dinov2_vits14",
-        "vit_b": "dinov2_vitb14",
-        "vit_l": "dinov2_vitl14",
-        "vit_g": "dinov2_vitg14",
-    }
-    # embed_dim for each variant.
-    _EMBED_DIMS = {
-        "vit_s": 384,
-        "vit_b": 768,
-        "vit_l": 1024,
-        "vit_g": 1536,
-    }
-
-    def __init__(
-        self,
-        variant: str = "vit_l",
-        pretrained: bool = True,
-        hook_layer_ids: Optional[List[int]] = None,
-        num_register_tokens: int = 0,
-    ):
-        """Initialise DINOv2Backbone.
-
-        Args:
-            variant: Which DINOv2 size to use. One of ``"vit_s"``, ``"vit_b"``,
-                ``"vit_l"``, ``"vit_g"``.
-            pretrained: Whether to load pretrained weights from ``torch.hub``.
-            hook_layer_ids: Indices of transformer blocks whose output should
-                be returned.  Defaults to the last four layers.
-            num_register_tokens: Number of register tokens used by the model
-                (0 for standard DINOv2, 4 for DINOv2-reg).
-        """
-        super().__init__()
-
-        hub_name = self._HUB_NAMES[variant]
-        self.embed_dim: int = self._EMBED_DIMS[variant]
-        self.num_register_tokens = num_register_tokens
-
-        self.model = torch.hub.load(
-            "facebookresearch/dinov2",
-            hub_name,
-            pretrained=pretrained,
-        )
-
-        total_layers = len(self.model.blocks)
-        if hook_layer_ids is None:
-            # Default: sample 4 layers evenly starting from 1/4 depth.
-            step = total_layers // 4
-            hook_layer_ids = [
-                total_layers // 4 - 1,
-                total_layers // 2 - 1,
-                3 * total_layers // 4 - 1,
-                total_layers - 1,
-            ]
-
-        self.hook_layer_ids: List[int] = hook_layer_ids
-        self._features: dict[int, torch.Tensor] = {}
-
-        # Register forward hooks on the selected transformer blocks.
-        for layer_id in self.hook_layer_ids:
-            self.model.blocks[layer_id].register_forward_hook(
-                self._make_hook(layer_id)
-            )
-
-    def _make_hook(self, layer_id: int):
-        def _hook(module, input, output):
-            self._features[layer_id] = output
-        return _hook
-
-    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
-        """Forward through DINOv2 and collect intermediate hidden states.
-
-        Args:
-            x: Input images, shape ``(B, 3, H, W)``.
-
-        Returns:
-            List of hidden-state tensors in ``hook_layer_ids`` order, each
-            shape ``(B, 1 + num_register_tokens + N, D)``.
-        """
-        self._features.clear()
-        _ = self.model(x)
-        return [self._features[lid] for lid in self.hook_layer_ids]
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +96,7 @@ class DepthAnything3(nn.Module):
         return cls(backbone=backbone, decoder=decoder)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Predict an inverse-depth map.
+        """Predict a depth map.
 
         Args:
             x: Input image tensor, shape ``(B, 3, H, W)``.
@@ -227,23 +132,10 @@ class DepthAnything3Model(VisionModule):
     output_modalities: list[Modality] = [Modality.DEPTH]
 
     def __init__(self, net: DepthAnything3):
-        """Initialise DepthAnything3Model.
-
-        Args:
-            net: A pre-constructed ``DepthAnything3`` instance.
-        """
         super().__init__()
         self.net = net
 
     def forward(self, **inputs: Any) -> dict[Modality, Any]:
-        """Run depth prediction.
-
-        Args:
-            **inputs: Must contain key ``"rgb"`` with a tensor value.
-
-        Returns:
-            ``{Modality.DEPTH: depth_tensor}``
-        """
         rgb: torch.Tensor = inputs[Modality.RGB.value]
         depth = self.net(rgb)
         return {Modality.DEPTH: depth}
@@ -273,25 +165,11 @@ class DepthAnything3Model(VisionModule):
         ``vit_g``  ``depth-anything/DA3-GIANT``           1536
         =========  =====================================  ===========
 
-        Key mapping applied before loading
-        -----------------------------------
-        The official checkpoints use a different module naming convention:
+        Checkpoint keys are remapped from the official naming convention;
+        see the source for the full mapping.  Unrecognised keys are silently
+        ignored via ``strict=False``.
 
-        * ``pretrained.*``                      → ``backbone.model.*``
-        * ``depth_head.projects.{i}.*``         → ``decoder.reassemble_blocks.{i}.project.*``
-        * ``depth_head.resize_layers.{i}.*``    → ``decoder.reassemble_blocks.{i}.resample.*``
-        * ``depth_head.scratch.refinenet{n}.*`` → ``decoder.fusion_blocks.{4-n}.*``
-          (with ``resConfUnit`` renamed to ``resConvUnit``)
-        * ``depth_head.scratch.output_conv1.*`` → ``decoder.head.0.*``
-        * ``depth_head.scratch.output_conv2.*`` → ``decoder.head.2.*``
-
-        ``strict=False`` is used so that keys present in the checkpoint but
-        absent from the unicv architecture (e.g. ``depth_head.scratch.layer_rn*``
-        intermediate convolutions) are silently ignored.
-
-        Requirements
-        ------------
-        ``pip install huggingface_hub safetensors``
+        Requirements: ``pip install huggingface_hub safetensors``
 
         Args:
             variant:   DINOv2 backbone size.  One of
@@ -308,13 +186,8 @@ class DepthAnything3Model(VisionModule):
 
             model = DepthAnything3Model.from_pretrained("vit_l")
         """
-        try:
-            from huggingface_hub import hf_hub_download
-        except ImportError:
-            raise ImportError(
-                "DepthAnything3Model.from_pretrained requires huggingface_hub.\n"
-                "Install it with:  pip install huggingface_hub"
-            )
+        _require_package("huggingface_hub")
+        from huggingface_hub import hf_hub_download
 
         _VARIANT_TO_REPO = {
             "vit_s": "depth-anything/DA3-SMALL",
@@ -339,11 +212,11 @@ class DepthAnything3Model(VisionModule):
             try:
                 from safetensors.torch import load_file as _load_safetensors
                 raw_sd = _load_safetensors(ckpt_path)
-            except ImportError:
+            except ImportError as e:
                 raise ImportError(
                     "Loading safetensors checkpoints requires the safetensors package.\n"
                     "Install it with:  pip install safetensors"
-                )
+                ) from e
         else:
             raw_sd = torch.load(ckpt_path, map_location="cpu", weights_only=True)
 
@@ -362,51 +235,18 @@ class DepthAnything3Model(VisionModule):
             new_key = key
 
             if new_key.startswith("pretrained."):
-                # DINOv2 backbone weights.
                 new_key = "backbone.model." + new_key[len("pretrained."):]
-
-            elif new_key.startswith("depth_head.projects."):
-                # Reassemble project conv: depth_head.projects.{i}.* → reassemble_blocks.{i}.project.*
-                rest = new_key[len("depth_head.projects."):]
-                idx, _, tail = rest.partition(".")
-                new_key = f"decoder.reassemble_blocks.{idx}.project.{tail}"
-
-            elif new_key.startswith("depth_head.resize_layers."):
-                # Reassemble spatial resample: depth_head.resize_layers.{i}.* → reassemble_blocks.{i}.resample.*
-                rest = new_key[len("depth_head.resize_layers."):]
-                idx, _, tail = rest.partition(".")
-                new_key = f"decoder.reassemble_blocks.{idx}.resample.{tail}"
-
-            elif new_key.startswith("depth_head.scratch.refinenet"):
-                # Fusion blocks — stored in reverse order in the checkpoint.
-                # refinenet4 (coarsest) → fusion_blocks[3]; refinenet1 (finest) → fusion_blocks[0].
-                rest = new_key[len("depth_head.scratch.refinenet"):]
-                n_str, _, tail = rest.partition(".")
-                i = 4 - int(n_str)            # refinenet4→0, refinenet3→1, …
-                tail = tail.replace("resConfUnit", "resConvUnit")
-                new_key = f"decoder.fusion_blocks.{i}.{tail}"
-
-            elif new_key.startswith("depth_head.scratch.output_conv1."):
-                tail = new_key[len("depth_head.scratch.output_conv1."):]
-                new_key = f"decoder.head.0.{tail}"
-
-            elif new_key.startswith("depth_head.scratch.output_conv2."):
-                tail = new_key[len("depth_head.scratch.output_conv2."):]
-                new_key = f"decoder.head.2.{tail}"
+            else:
+                dpt_key = _remap_dpt_key(new_key)
+                if dpt_key is not None:
+                    new_key = dpt_key
 
             # Keys that don't match any pattern (e.g. depth_head.scratch.layer_rn*)
             # are kept as-is and will fall through strict=False unmatched.
             remapped[new_key] = val
 
         missing, _ = net.load_state_dict(remapped, strict=False)
-        if missing:
-            import warnings
-            shown = missing[:5]
-            warnings.warn(
-                f"DepthAnything3 ({variant}): {len(missing)} missing key(s) when "
-                f"loading pretrained weights (first 5): {shown}",
-                stacklevel=2,
-            )
+        _warn_missing_keys(f"DepthAnything3 ({variant})", missing)
 
         return cls(net=net)
 
