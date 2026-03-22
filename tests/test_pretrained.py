@@ -286,13 +286,13 @@ class TestDepthAnything3FromPretrained:
         assert torch.all(model.net.decoder.reassemble_blocks[0].project.bias == 5.0)
 
     def test_resconfunit_renamed_to_resconvunit(self):
-        """resConfUnit keys are remapped to resConvUnit without error."""
+        """resConfUnit keys are remapped to res_conv_unit without error."""
         sd = {
             "depth_head.scratch.refinenet3.resConfUnit2.conv1.weight": torch.zeros(256, 256, 3, 3),
             "depth_head.scratch.refinenet3.resConfUnit2.conv1.bias":   torch.zeros(256),
         }
         model = self._run("vit_l", sd=sd)
-        assert isinstance(model.net.decoder.fusion_blocks[1].resConvUnit2.conv1.weight, torch.Tensor)
+        assert isinstance(model.net.decoder.fusion_blocks[1].res_conv_unit2.conv1.weight, torch.Tensor)
 
 
 # ---------------------------------------------------------------------------
@@ -493,25 +493,25 @@ class TestSHARPFromPretrained:
     # -- key remapping: fusion blocks --
 
     def test_fusion_resnet1_conv1_remapped(self):
-        """fusions.0.resnet1.residual.1.weight → fusion_blocks[0].resConvUnit1.conv1.weight"""
+        """fusions.0.resnet1.residual.1.weight → fusion_blocks[0].res_conv_unit1.conv1.weight"""
         sd    = {"gaussian_decoder.fusions.0.resnet1.residual.1.weight": torch.full((_F, _F, 3, 3), 7.0),
                  "gaussian_decoder.fusions.0.resnet1.residual.1.bias":   torch.zeros(_F)}
         model = self._run(sd)
-        assert torch.all(model.net.feature_decoder.fusion_blocks[0].resConvUnit1.conv1.weight == 7.0)
+        assert torch.all(model.net.feature_decoder.fusion_blocks[0].res_conv_unit1.conv1.weight == 7.0)
 
     def test_fusion_resnet1_conv2_remapped(self):
-        """fusions.0.resnet1.residual.3.weight → fusion_blocks[0].resConvUnit1.conv2.weight"""
+        """fusions.0.resnet1.residual.3.weight → fusion_blocks[0].res_conv_unit1.conv2.weight"""
         sd    = {"gaussian_decoder.fusions.0.resnet1.residual.3.weight": torch.full((_F, _F, 3, 3), 2.0),
                  "gaussian_decoder.fusions.0.resnet1.residual.3.bias":   torch.zeros(_F)}
         model = self._run(sd)
-        assert torch.all(model.net.feature_decoder.fusion_blocks[0].resConvUnit1.conv2.weight == 2.0)
+        assert torch.all(model.net.feature_decoder.fusion_blocks[0].res_conv_unit1.conv2.weight == 2.0)
 
     def test_fusion_resnet2_conv1_remapped(self):
-        """fusions.1.resnet2.residual.1.weight → fusion_blocks[1].resConvUnit2.conv1.weight"""
+        """fusions.1.resnet2.residual.1.weight → fusion_blocks[1].res_conv_unit2.conv1.weight"""
         sd    = {"gaussian_decoder.fusions.1.resnet2.residual.1.weight": torch.full((_F, _F, 3, 3), 3.0),
                  "gaussian_decoder.fusions.1.resnet2.residual.1.bias":   torch.zeros(_F)}
         model = self._run(sd)
-        assert torch.all(model.net.feature_decoder.fusion_blocks[1].resConvUnit2.conv1.weight == 3.0)
+        assert torch.all(model.net.feature_decoder.fusion_blocks[1].res_conv_unit2.conv1.weight == 3.0)
 
     def test_fusion_out_conv_remapped(self):
         """fusions.0.out_conv.weight → fusion_blocks[0].out_conv.weight"""

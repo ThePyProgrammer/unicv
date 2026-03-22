@@ -11,6 +11,7 @@ from unicv.models.depth_anything_3.model import (
     DINOv2Backbone,
 )
 from unicv.nn.dpt import DPTDecoder
+from unicv.utils.types import Modality
 
 
 # ---------------------------------------------------------------------------
@@ -156,3 +157,22 @@ def test_depth_anything3_model_instantiation():
     net = DepthAnything3(backbone=backbone, decoder=decoder)
     wrapper = DepthAnything3Model(net=net)
     assert isinstance(wrapper, DepthAnything3Model)
+
+
+def test_depth_anything3_model_forward():
+    """DepthAnything3Model.__call__ runs full VisionModule pipeline."""
+    backbone = _MockBackbone(img_size=64, patch_size=16)
+    decoder = DPTDecoder(
+        embed_dim=256,
+        features=64,
+        num_layers=4,
+        patch_size=16,
+        img_size=64,
+        out_channels=1,
+    )
+    net = DepthAnything3(backbone=backbone, decoder=decoder)
+    wrapper = DepthAnything3Model(net=net)
+    net.eval()
+    result = wrapper(rgb=torch.zeros(2, 3, 64, 64))
+    assert Modality.DEPTH in result
+    assert result[Modality.DEPTH].shape[0] == 2

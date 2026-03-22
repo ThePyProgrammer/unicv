@@ -79,8 +79,8 @@ def test_sdt_head_forward_non_negative():
 
 
 def test_sdt_head_wrong_num_levels_raises():
-    """Passing the wrong number of hidden states raises AssertionError."""
+    """Passing the wrong number of hidden states raises ValueError."""
     head = SDTHead(embed_dim=EMBED_DIM, decoder_dim=DECODER_DIM,
                    num_levels=4, patch_size=PATCH_SIZE, img_size=IMG_SIZE)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         head([torch.zeros(B, 17, EMBED_DIM)] * 3)  # expected 4, got 3

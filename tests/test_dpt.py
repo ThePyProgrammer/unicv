@@ -121,8 +121,8 @@ def test_dpt_decoder_forward():
 
 
 def test_dpt_decoder_wrong_num_states_raises():
-    """Mismatched number of hidden states raises AssertionError."""
+    """Mismatched number of hidden states raises ValueError."""
     decoder = DPTDecoder(embed_dim=EMBED_DIM, features=FEATURES, num_layers=4,
                          patch_size=PATCH_SIZE, img_size=IMG_SIZE)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         decoder([_make_tokens()] * 3)   # expected 4, got 3

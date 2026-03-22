@@ -91,7 +91,7 @@ def test_list_input_form_accepted():
 
 def test_list_input_form_rejects_scalar():
     m = _ListInputModule()
-    with pytest.raises(TypeError, match="Expected list/tuple"):
+    with pytest.raises(TypeError, match=r"Expected .+ \(list/tuple\)"):
         m(rgb=torch.zeros(1, 3, 4, 4))  # should be a list
 
 

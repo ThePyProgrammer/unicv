@@ -1,11 +1,13 @@
 """Tests for DepthProEncoder, DepthPro, and DepthProModel (unicv.models.depth_pro)."""
 
+import pytest
 import torch
 import torch.nn as nn
 
 from unicv.models.depth_pro.encoder import DepthProEncoder
 from unicv.models.depth_pro.model import DepthPro, DepthProModel
 from unicv.nn.decoder import MultiresConvDecoder
+from unicv.utils.types import Modality
 
 
 # ---------------------------------------------------------------------------
@@ -154,3 +156,88 @@ def test_depth_pro_model_instantiation():
 
     wrapper = DepthProModel(net=net)
     assert isinstance(wrapper, DepthProModel)
+
+
+# ---------------------------------------------------------------------------
+# DepthPro.infer – resize / FOV / metric-depth logic
+# ---------------------------------------------------------------------------
+
+def _make_depth_pro(use_fov_head: bool = False) -> DepthPro:
+    encoder = _TinyMockEncoder()
+    decoder = MultiresConvDecoder(dims_encoder=[64, 64, 64], dim_decoder=64)
+    return DepthPro(
+        encoder=encoder, decoder=decoder,
+        last_dims=(32, 1), use_fov_head=use_fov_head,
+    )
+
+
+def test_infer_returns_depth_and_focal_keys():
+    """infer() returns dict with 'depth' and 'focallength_px'."""
+    model = _make_depth_pro()
+    model.eval()
+    x = torch.zeros(1, 3, 32, 32)
+    result = model.infer(x, f_px=torch.tensor(32.0))
+    assert "depth" in result
+    assert "focallength_px" in result
+
+
+def test_infer_non_matching_resolution_resizes():
+    """infer() handles images that don't match img_size."""
+    model = _make_depth_pro()
+    model.eval()
+    x = torch.zeros(1, 3, 16, 16)  # smaller than img_size=32
+    result = model.infer(x, f_px=torch.tensor(16.0))
+    assert "depth" in result
+
+
+def test_infer_no_fov_no_fpx_raises():
+    """infer() with use_fov_head=False and f_px=None raises ValueError."""
+    model = _make_depth_pro(use_fov_head=False)
+    model.eval()
+    x = torch.zeros(1, 3, 32, 32)
+    with pytest.raises(ValueError, match="f_px is required"):
+        model.infer(x, f_px=None)
+
+
+def test_infer_explicit_fpx_overrides_fov():
+    """Explicit f_px skips FOV estimation entirely."""
+    model = _make_depth_pro()
+    model.eval()
+    x = torch.zeros(1, 3, 32, 32)
+    f_px = torch.tensor(100.0)
+    result = model.infer(x, f_px=f_px)
+    assert result["focallength_px"].item() == pytest.approx(100.0)
+
+
+def test_infer_3d_input_auto_batched():
+    """infer() accepts (3, H, W) input and auto-adds batch dim."""
+    model = _make_depth_pro()
+    model.eval()
+    x = torch.zeros(3, 32, 32)
+    result = model.infer(x, f_px=torch.tensor(32.0))
+    assert "depth" in result
+
+
+# ---------------------------------------------------------------------------
+# DepthProModel – VisionModule forward path
+# ---------------------------------------------------------------------------
+
+def test_depth_pro_model_forward():
+    """DepthProModel.__call__ runs full VisionModule pipeline."""
+    # DepthProModel.forward calls net.infer() which needs either FOV head or
+    # explicit f_px. Patch infer to supply a default f_px for testing.
+    model = _make_depth_pro(use_fov_head=False)
+    model.eval()
+    wrapper = DepthProModel(net=model)
+    # Provide f_px via a thin monkey-patch on infer
+    original_infer = model.infer
+
+    @torch.no_grad()
+    def _infer_with_fpx(x, f_px=None, interpolation_mode="bilinear"):
+        if f_px is None:
+            f_px = torch.tensor(32.0)
+        return original_infer(x, f_px=f_px, interpolation_mode=interpolation_mode)
+
+    model.infer = _infer_with_fpx
+    result = wrapper(rgb=torch.zeros(1, 3, 32, 32))
+    assert Modality.DEPTH in result
