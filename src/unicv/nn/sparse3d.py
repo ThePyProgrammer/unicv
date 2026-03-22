@@ -29,27 +29,36 @@ import torch.nn as nn
 
 
 # ---------------------------------------------------------------------------
-# Backend detection (lazy -- checked once at import time)
+# Backend detection (lazy -- probed on first use, not at import time)
 # ---------------------------------------------------------------------------
 
-def _detect_backend() -> str | None:
-    try:
-        import spconv.pytorch  # noqa: F401
-        return "spconv"
-    except ImportError:
-        pass
-    try:
-        import MinkowskiEngine  # noqa: F401
-        return "minkowski"
-    except ImportError:
-        pass
-    return None
+_SPARSE3D_BACKEND: str | None = None
+_BACKEND_PROBED: bool = False
 
 
-_SPARSE3D_BACKEND: str | None = _detect_backend()
+def _get_backend() -> str | None:
+    """Return the detected sparse-conv backend, probing lazily on first call."""
+    global _SPARSE3D_BACKEND, _BACKEND_PROBED
+    if not _BACKEND_PROBED:
+        try:
+            import spconv.pytorch  # noqa: F401
+            _SPARSE3D_BACKEND = "spconv"
+        except ImportError:
+            try:
+                import MinkowskiEngine  # noqa: F401
+                _SPARSE3D_BACKEND = "minkowski"
+            except ImportError:
+                _SPARSE3D_BACKEND = None
+        _BACKEND_PROBED = True
+    return _SPARSE3D_BACKEND
 
-#: ``True`` when at least one sparse-conv backend is importable.
-SPARSE3D_BACKEND_AVAILABLE: bool = _SPARSE3D_BACKEND is not None
+
+def SPARSE3D_BACKEND_AVAILABLE() -> bool:
+    """``True`` when at least one sparse-conv backend is importable.
+
+    Lazy -- the backend probe runs on first call, not at import time.
+    """
+    return _get_backend() is not None
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +105,7 @@ class SparseVoxelTensor:
         return (
             f"SparseVoxelTensor(N={self.num_active}, C={self.num_channels}, "
             f"spatial_shape={self.spatial_shape}, batch_size={self.batch_size}, "
-            f"backend={_SPARSE3D_BACKEND!r})"
+            f"backend={_get_backend()!r})"
         )
 
 
@@ -202,7 +211,7 @@ class SparseConv3d(nn.Module):
     ) -> None:
         super().__init__()
 
-        self._backend = _SPARSE3D_BACKEND
+        self._backend = _get_backend()
 
         if self._backend is None:
             raise ImportError(

@@ -160,7 +160,7 @@ def test_voxelize_devoxelize_partial_mask():
 # ---------------------------------------------------------------------------
 
 _skip_no_backend = pytest.mark.skipif(
-    not SPARSE3D_BACKEND_AVAILABLE,
+    not SPARSE3D_BACKEND_AVAILABLE(),
     reason="No sparse 3-D convolution backend installed (spconv / MinkowskiEngine)",
 )
 
