@@ -30,7 +30,7 @@ irm https://astral.sh/uv/install.ps1 | iex
 Then clone the repository and install all dependencies (including dev extras):
 
 ```bash
-git clone https://github.com/aether-raid/unicv.git
+git clone https://github.com/ThePyProgrammer/unicv.git
 cd unicv
 uv sync --dev
 ```
@@ -220,7 +220,7 @@ New `nn` modules live in `src/unicv/nn/`. Follow the same shape-test convention 
 
 ## Reporting issues
 
-Please use the [GitHub issue tracker](https://github.com/aether-raid/unicv/issues). Include:
+Please use the [GitHub issue tracker](https://github.com/ThePyProgrammer/unicv/issues). Include:
 
 - Your Python version (`uv run python --version`).
 - Your PyTorch version (`uv run python -c "import torch; print(torch.__version__)"`).

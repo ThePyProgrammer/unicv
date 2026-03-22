@@ -27,4 +27,4 @@ variant = "modern"
 
 [project.extra]
 repo_url = "https://github.com/ThePyProgrammer/unicv"
-repo_name = "aether-raid/unicv"
+repo_name = "ThePyProgrammer/unicv"

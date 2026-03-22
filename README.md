@@ -1,7 +1,7 @@
 # UniCV
 
 [![PyPI Latest Release](https://img.shields.io/pypi/v/unicv.svg?logo=python&logoColor=white&color=blue)](https://pypi.org/project/unicv/)
-[![CI](https://img.shields.io/github/actions/workflow/status/aether-raid/unicv/ci.yml?label=CI&logo=github)](https://github.com/aether-raid/unicv/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/ThePyProgrammer/unicv/ci.yml?label=CI&logo=github)](https://github.com/ThePyProgrammer/unicv/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 UniCV is a unified, extensible framework for computer vision models that operate across heterogeneous input and output representations. It wraps state-of-the-art models — depth estimators, Gaussian splat predictors, mesh generators, and more — behind a single, composable `VisionModule` interface.

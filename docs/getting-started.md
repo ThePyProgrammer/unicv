@@ -23,7 +23,7 @@ This adds `huggingface_hub`, `timm`, and `safetensors`.
 ### From source
 
 ```bash
-git clone https://github.com/aether-raid/unicv.git
+git clone https://github.com/ThePyProgrammer/unicv.git
 cd unicv
 pip install .
 ```
