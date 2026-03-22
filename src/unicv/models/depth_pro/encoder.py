@@ -126,25 +126,25 @@ class DepthProEncoder(nn.Module):
         )
 
         # Obtain intermediate outputs of the blocks.
-        self.backbone_highres_hook0: torch.Tensor | None = None
-        self.backbone_highres_hook1: torch.Tensor | None = None
+        self.backbone_shallow_features: torch.Tensor | None = None
+        self.backbone_deep_features: torch.Tensor | None = None
 
         self.patch_encoder.blocks[self.hook_block_ids[0]].register_forward_hook(
-            self._hook0
+            self._hook_shallow
         )
         self.patch_encoder.blocks[self.hook_block_ids[1]].register_forward_hook(
-            self._hook1
+            self._hook_deep
         )
 
-    def _hook0(self, model: nn.Module, input: tuple, output: torch.Tensor) -> None:
-        self.backbone_highres_hook0 = output
+    def _hook_shallow(self, model: nn.Module, input: tuple, output: torch.Tensor) -> None:
+        self.backbone_shallow_features = output
 
-    def _hook1(self, model: nn.Module, input: tuple, output: torch.Tensor) -> None:
-        self.backbone_highres_hook1 = output
+    def _hook_deep(self, model: nn.Module, input: tuple, output: torch.Tensor) -> None:
+        self.backbone_deep_features = output
 
     @property
     def img_size(self) -> int:
-        """Return the full image size of the SPN network."""
+        """Return the full input image size (4x the backbone patch resolution)."""
         return self.patch_encoder.patch_embed.img_size[0] * 4
 
     def _create_pyramid(
@@ -267,7 +267,7 @@ class DepthProEncoder(nn.Module):
         # Step 3: merging.
         # Merge highres latent encoding.
         x_latent0_encodings = self.reshape_feature(
-            self.backbone_highres_hook0,
+            self.backbone_shallow_features,
             self.out_size,
             self.out_size,
         )
@@ -276,7 +276,7 @@ class DepthProEncoder(nn.Module):
         )
 
         x_latent1_encodings = self.reshape_feature(
-            self.backbone_highres_hook1,
+            self.backbone_deep_features,
             self.out_size,
             self.out_size,
         )
