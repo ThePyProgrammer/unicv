@@ -1,12 +1,6 @@
 # UniCV
 
-[![PyPI Latest Release](https://img.shields.io/pypi/v/unicv.svg?logo=python&logoColor=white&color=blue)](https://pypi.org/project/unicv/)
-[![CI](https://img.shields.io/github/actions/workflow/status/aether-raid/unicv/ci.yml?label=CI&logo=github)](https://github.com/aether-raid/unicv/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
 UniCV is a unified, extensible framework for computer vision models that operate across heterogeneous input and output representations. It wraps state-of-the-art models — depth estimators, Gaussian splat predictors, mesh generators, and more — behind a single, composable `VisionModule` interface.
-
----
 
 ## Philosophy
 
@@ -41,67 +35,17 @@ UniCV aims to support vision systems that are:
 5. **Extensible**, supporting both classical CV algorithms and modern deep learning approaches, including implicit scene representations and neural rendering techniques.
 6. **Foundation-ready**, serving as an architectural substrate for training large, generalist vision models capable of cross-task and cross-representation transfer.
 
-In addition to standard convolutional and Transformer-based architectures, UniCV is designed to accommodate emerging paradigms such as implicit neural representations, Gaussian splatting, and hybrid geometric–neural pipelines, enabling a unified experimental platform for next-generation 3D perception systems.
-
----
-
-## Quick Start
-
-```bash
-pip install unicv                  # core (torch only)
-pip install unicv[pretrained]      # + huggingface_hub, timm, safetensors
-```
-
-```python
-from unicv.models.depth_anything_3 import DepthAnything3Model
-
-model  = DepthAnything3Model.from_pretrained(variant="vit_l")
-result = model(rgb=image_tensor)   # {Modality.DEPTH: (B, 1, H, W)}
-```
-
-Every model follows the same interface — only `input_spec` and `output_modalities` differ. See the [Getting Started guide](docs/getting-started.md) for all models.
-
----
-
-## Implemented Models
-
-| Model | Paper | Input → Output | Pretrained |
-|-------|-------|----------------|------------|
-| [DepthPro](https://github.com/apple/ml-depth-pro) | Apple, 2024 | RGB → Depth | `DepthProModel.from_pretrained()` |
-| [Depth Anything 3](https://depth-anything-3.github.io/) | ByteDance, 2025 | RGB → Depth | `DepthAnything3Model.from_pretrained(variant=...)` |
-| [Camera Depth Model](https://manipulation-as-in-simulation.github.io/#cdm-results) | ByteDance, 2025 | RGB + Depth → Depth | `CameraDepthModel.from_pretrained(camera=...)` |
-| [SHARP](https://apple.github.io/ml-sharp/) | Apple, 2024 | RGB → Splat | `SHARPModel.from_pretrained()` |
-| [SimpleRecon](https://nianticlabs.github.io/simplerecon/) | Niantic, 2022 | RGB (temporal) → Depth | -- |
-
-See the [full model catalogue](docs/models/catalogue.md) for planned models.
-
----
+In addition to standard convolutional and Transformer-based architectures, UniCV is designed to accommodate emerging paradigms such as implicit neural representations, Gaussian splatting, and hybrid geometric-neural pipelines, enabling a unified experimental platform for next-generation 3D perception systems.
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Getting Started](docs/getting-started.md) | Installation, usage, pretrained weights |
-| [VisionModule Interface](docs/vision-module.md) | The core abstraction in detail |
-| [Building Blocks](docs/nn/overview.md) | Shared decoders, heads, geometry utilities |
-| [Architecture](ARCHITECTURE.md) | High-level codebase map |
-| **Model Guides** | |
-| [DepthPro](docs/models/depth-pro.md) | Multi-scale patch-pyramid encoder walkthrough |
-| [Depth Anything 3](docs/models/depth-anything-3.md) | DINOv2 + DPT decoder walkthrough |
-| [Camera Depth Model](docs/models/cdm.md) | Dual-ViT fusion walkthrough |
-| [SHARP](docs/models/sharp.md) | Single-image Gaussian splat walkthrough |
-| [SimpleRecon](docs/models/simple-recon.md) | Plane-sweep stereo walkthrough |
-
----
-
-## Contributing
-
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on adding new models, writing tests, and submitting pull requests.
-
-## Code of Conduct
-
-This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By participating, you agree to uphold a welcoming and respectful environment for everyone.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+- [Getting Started](getting-started.md) — installation, quick usage, pretrained weights
+- [VisionModule Interface](vision-module.md) — the core abstraction in detail
+- [Building Blocks (`unicv.nn`)](nn/overview.md) — shared decoders, heads, and geometry utilities
+- **Model Guides** — per-model architecture walkthroughs and usage:
+  - [DepthPro](models/depth-pro.md)
+  - [Depth Anything 3](models/depth-anything-3.md)
+  - [Camera Depth Model](models/cdm.md)
+  - [SHARP](models/sharp.md)
+  - [SimpleRecon](models/simple-recon.md)
+- [Model Catalogue](models/catalogue.md) — full table of implemented and planned models
