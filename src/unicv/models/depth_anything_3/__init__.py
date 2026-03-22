@@ -1,8 +1,8 @@
 """Depth Anything 3 model package.
 
 Contains the Depth Anything 3 depth estimation model:
-- ``DepthAnything3`` – the raw PyTorch nn.Module
-- ``DepthAnything3Model`` – VisionModule wrapper for use in unicv pipelines
+- ``DepthAnything3`` -- the raw PyTorch nn.Module
+- ``DepthAnything3Model`` -- VisionModule wrapper for use in unicv pipelines
 
 Note: ``DINOv2Backbone`` has moved to ``unicv.nn.dinov2``.
 """

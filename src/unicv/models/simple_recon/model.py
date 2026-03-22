@@ -13,12 +13,12 @@ A lightweight plane-sweep stereo network:
 
 Architecture reference
 -----------------------
-    Sayed et al. – SimpleRecon: 3D Reconstruction Without 3D Convolutions
+    Sayed et al. -- SimpleRecon: 3D Reconstruction Without 3D Convolutions
     https://nianticlabs.github.io/simplerecon/
 
 Note on camera parameters
 --------------------------
-Camera intrinsics ``K`` and relative poses ``T_{src←ref}`` are required by
+Camera intrinsics ``K`` and relative poses ``T_{src<-ref}`` are required by
 the cost volume but are *not* ``Modality`` values in the UniCV type system.
 The raw ``SimpleRecon`` module accepts them explicitly.  The
 ``SimpleReconModel`` VisionModule wrapper defaults to identity camera
@@ -53,7 +53,7 @@ from unicv.utils.types import InputForm, Modality
 class SimpleEncoder(nn.Module):
     """Lightweight CNN that encodes a single RGB frame into a feature map.
 
-    Three stride-2 convolutions reduce spatial resolution by 8×.  The
+    Three stride-2 convolutions reduce spatial resolution by 8x.  The
     encoder is intentionally shallow so that cost-volume construction stays
     memory-efficient.
 
@@ -171,7 +171,7 @@ class SimpleRecon(nn.Module):
                              frame is the reference; the rest are sources.
             intrinsics:      Reference camera intrinsics ``(B, 3, 3)``.
             src_intrinsics:  Per-source intrinsics, list of ``(B, 3, 3)``.
-            src_poses:       Relative poses ``T_{src←ref}``, list of ``(B, 4, 4)``.
+            src_poses:       Relative poses ``T_{src<-ref}``, list of ``(B, 4, 4)``.
 
         Returns:
             Depth map ``(B, 1, H, W)`` upsampled to the input resolution.

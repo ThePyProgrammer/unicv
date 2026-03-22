@@ -17,7 +17,7 @@ class DINOv2Backbone(nn.Module):
     transformer layers so that the DPT decoder can reassemble them.
     """
 
-    # Map config name → hub model name.
+    # Map config name -> hub model name.
     _HUB_NAMES = {
         "vit_s": "dinov2_vits14",
         "vit_b": "dinov2_vitb14",

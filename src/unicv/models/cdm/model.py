@@ -7,15 +7,15 @@ fused states are decoded by a DPTDecoder into a refined depth map.
 
 Architecture reference
 -----------------------
-    Manipulation as in Simulation – Camera Depth Model
+    Manipulation as in Simulation -- Camera Depth Model
     https://manipulation-as-in-simulation.github.io/#cdm-results
 
 This implementation follows the documented design:
-- ``TokenFusion``     – per-level additive fusion: fused = rgb + proj(depth)
-- ``CDM``             – wraps two backbones (any callable returning
+- ``TokenFusion``     -- per-level additive fusion: fused = rgb + proj(depth)
+- ``CDM``             -- wraps two backbones (any callable returning
                          ``List[Tensor(B, N, D)]``), N fusion layers,
                          and a ``DPTDecoder``
-- ``CameraDepthModel``– ``VisionModule`` wrapper
+- ``CameraDepthModel``-- ``VisionModule`` wrapper
 
 VisionModule spec
 -----------------
@@ -77,7 +77,7 @@ class TokenFusion(nn.Module):
 # ---------------------------------------------------------------------------
 
 class CDM(nn.Module):
-    """Camera Depth Model – dual-ViT encoder with per-level token fusion.
+    """Camera Depth Model -- dual-ViT encoder with per-level token fusion.
 
     Both ``rgb_backbone`` and ``depth_backbone`` must be callable modules
     that accept a ``(B, 3, H, W)`` tensor and return a list of
@@ -297,7 +297,7 @@ class CameraDepthModel(VisionModule):
         state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=True)
 
         # Build CDM with ViT-L (matching the official training config) but
-        # without loading DINOv2 pretrained weights from torch.hub — backbone
+        # without loading DINOv2 pretrained weights from torch.hub -- backbone
         # weights come from the CDM checkpoint itself.
         net = CDM.from_config(
             variant="vit_l",
@@ -325,7 +325,7 @@ class CameraDepthModel(VisionModule):
                 if dpt_key is not None:
                     new_key = dpt_key
 
-            # depth_proj.*, fusion_layers.*, decoder.* — pass through unchanged.
+            # depth_proj.*, fusion_layers.*, decoder.* -- pass through unchanged.
             remapped[new_key] = val
 
         missing, _ = net.load_state_dict(remapped, strict=False)

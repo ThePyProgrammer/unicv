@@ -1,4 +1,4 @@
-"""SHARP – Single-image Gaussian splat prediction model.
+"""SHARP -- Single-image Gaussian splat prediction model.
 
 A fully feed-forward model that converts a single RGB image into a dense
 3-D Gaussian splat in under one second on a standard GPU.
@@ -9,11 +9,11 @@ Architecture
    the image into multi-level patch-token sequences.
 2. **DPT feature decoder** reassembles the tokens into a dense feature map
    ``(B, F, H, W)`` at full (or half) resolution.
-3. **Depth head** – a shallow CNN predicts a per-pixel depth ``(B, 1, H, W)``
+3. **Depth head** -- a shallow CNN predicts a per-pixel depth ``(B, 1, H, W)``
    using softplus activation (depth > 0).
 4. **GaussianHead** reads the feature map and regresses per-pixel Gaussian
    parameters (scales, rotations, opacities, SH coefficients).
-5. **Backprojection** – predicted depth + camera intrinsics → 3-D positions
+5. **Backprojection** -- predicted depth + camera intrinsics -> 3-D positions
    ``xyz`` in camera space; replaces the GaussianHead's raw xyz output.
 
 Paper reference
@@ -24,7 +24,7 @@ Paper reference
 VisionModule spec
 -----------------
     Inputs:  Modality.RGB (SINGLE): ``(B, 3, H, W)``
-    Outputs: Modality.SPLAT        : ``GaussianCloud`` with ``N = H × W``
+    Outputs: Modality.SPLAT        : ``GaussianCloud`` with ``N = H x W``
                                      Gaussians per image
 
 Camera intrinsics
@@ -64,7 +64,7 @@ class SHARP(nn.Module):
                           ``List[Tensor(B, 1+extra+N, embed_dim)]``.
         feature_decoder:  ``DPTDecoder`` with ``out_channels=features``.
         gaussian_head:    ``GaussianHead(in_channels=features, sh_degree=…)``
-                          — regresses scales, rotations, opacities, sh_coeffs.
+                          -- regresses scales, rotations, opacities, sh_coeffs.
     """
 
     def __init__(
@@ -81,7 +81,7 @@ class SHARP(nn.Module):
         # Infer the decoder output width from the head's in_channels.
         features = gaussian_head.xyz_head.in_channels   # type: ignore[attr-defined]
 
-        # Shallow depth head: features → (B, 1, H, W) with depth > 0.
+        # Shallow depth head: features -> (B, 1, H, W) with depth > 0.
         self.depth_head = nn.Sequential(
             nn.Conv2d(features, features // 2, kernel_size=1, bias=False),
             nn.ReLU(inplace=True),
@@ -103,7 +103,7 @@ class SHARP(nn.Module):
                         focal = max(H, W) and principal point at centre.
 
         Returns:
-            ``GaussianCloud`` with ``N = H × W`` Gaussians per image.
+            ``GaussianCloud`` with ``N = H x W`` Gaussians per image.
         """
         B, _, H, W = rgb.shape
 
@@ -117,7 +117,7 @@ class SHARP(nn.Module):
         # --- Gaussian parameters (scales, rotations, opacities, sh_coeffs) ---
         cloud: GaussianCloud = self.gaussian_head(feat_map)
 
-        # --- Depth → 3-D positions via backprojection ---
+        # --- Depth -> 3-D positions via backprojection ---
         depth: torch.Tensor = self.depth_head(feat_map)   # (B, 1, H, W)
 
         K = default_intrinsics(B, H, W, rgb.device) if intrinsics is None else intrinsics
@@ -195,7 +195,7 @@ class SHARPModel(VisionModule):
         rgb (Modality.RGB, InputForm.SINGLE): ``(B, 3, H, W)``
 
     Outputs:
-        Modality.SPLAT: ``GaussianCloud`` with ``N = H × W`` Gaussians.
+        Modality.SPLAT: ``GaussianCloud`` with ``N = H x W`` Gaussians.
     """
 
     input_spec: dict[Modality, InputForm] = {Modality.RGB: InputForm.SINGLE}
@@ -207,7 +207,7 @@ class SHARPModel(VisionModule):
 
     def forward(self, **inputs: Any) -> dict[Modality, Any]:
         rgb: torch.Tensor = inputs[Modality.RGB.value]
-        cloud = self.net(rgb)   # intrinsics=None → default estimate
+        cloud = self.net(rgb)   # intrinsics=None -> default estimate
         return {Modality.SPLAT: cloud}
 
 
@@ -231,7 +231,7 @@ class SHARPModel(VisionModule):
         dropped and unrecognised keys are ignored via ``strict=False``.
 
         Args:
-            sh_degree:  Spherical-harmonic degree for the colour head (0–3).
+            sh_degree:  Spherical-harmonic degree for the colour head (0--3).
             img_size:   Square input resolution passed to the decoder
                         (default 518).
             features:   Decoder channel width (default 256).
@@ -268,13 +268,13 @@ class SHARPModel(VisionModule):
             pretrained=False,
         )
 
-        # Remap official RGBGaussianPredictor keys → unicv SHARP keys.
+        # Remap official RGBGaussianPredictor keys -> unicv SHARP keys.
         remapped: dict[str, torch.Tensor] = {}
         for key, val in state_dict.items():
             new_key: str | None = None
 
             # gaussian_decoder.fusions.{i}.resnet{1,2}.residual.{1,3}.*
-            #   → feature_decoder.fusion_blocks.{i}.res_conv_unit{1,2}.conv{1,2}.*
+            #   -> feature_decoder.fusion_blocks.{i}.res_conv_unit{1,2}.conv{1,2}.*
             if key.startswith("gaussian_decoder.fusions."):
                 rest         = key[len("gaussian_decoder.fusions."):]
                 idx, _, tail = rest.partition(".")
@@ -305,8 +305,8 @@ class SHARPModel(VisionModule):
                     )
 
             # prediction_head.geometry_prediction_head.*
-            #   → gaussian_head.xyz_head.*
-            # (the official head may output 3×num_layers channels rather than
+            #   -> gaussian_head.xyz_head.*
+            # (the official head may output 3xnum_layers channels rather than
             # 3; the shape filter below will drop it when that is the case.)
             elif key.startswith("prediction_head.geometry_prediction_head."):
                 new_key = (

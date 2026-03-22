@@ -8,10 +8,10 @@ Architecture
 ------------
 - **Backbone**: DINOv2 (ViT-L/14) loaded via ``torch.hub``.  The backbone
   exposes 4 intermediate hidden states for use by the decoder.
-- **Decoder**: ``DPTDecoder`` from ``unicv.nn.dpt`` – reassembles patch tokens
+- **Decoder**: ``DPTDecoder`` from ``unicv.nn.dpt`` -- reassembles patch tokens
   into multi-scale spatial maps and progressively fuses them to full resolution.
 - **VisionModule wrapper**: ``DepthAnything3Model`` implements the standard
-  ``VisionModule`` interface (RGB-in → DEPTH-out).
+  ``VisionModule`` interface (RGB-in -> DEPTH-out).
 """
 
 from __future__ import annotations

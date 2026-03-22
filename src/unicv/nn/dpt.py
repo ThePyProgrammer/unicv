@@ -60,7 +60,7 @@ class ResidualConvUnit(nn.Module):
 # ---------------------------------------------------------------------------
 
 class FeatureFusionBlock(nn.Module):
-    """Fusion block that merges two feature maps and upsamples by 2×.
+    """Fusion block that merges two feature maps and upsamples by 2x.
 
     Used to progressively build up the full-resolution prediction from the
     coarsest encoder level to the finest.
@@ -111,7 +111,7 @@ class FeatureFusionBlock(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# Reassemble blocks: convert ViT tokens → spatial feature maps
+# Reassemble blocks: convert ViT tokens -> spatial feature maps
 # ---------------------------------------------------------------------------
 
 class Reassemble(nn.Module):
@@ -147,7 +147,7 @@ class Reassemble(nn.Module):
         self.num_patches = (img_size // patch_size) ** 2
         self.num_register_tokens = num_register_tokens
 
-        # 1. Project from embed_dim → out_channels.
+        # 1. Project from embed_dim -> out_channels.
         self.project = nn.Conv2d(embed_dim, out_channels, kernel_size=1, bias=True)
 
         # 2. Spatial re-sampling.

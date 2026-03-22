@@ -50,7 +50,7 @@ class FeatureFusionBlock2d(nn.Module):
 
         Args:
             num_features: Input and output channel dimensions.
-            deconv: If True, apply a transposed convolution (2× upsample) before
+            deconv: If True, apply a transposed convolution (2x upsample) before
                 the output convolution.
             batch_norm: If True, add BatchNorm inside residual blocks.
         """
@@ -148,7 +148,7 @@ class MultiresConvDecoder(nn.Module):
 
         num_encoders = len(self.dims_encoder)
 
-        # At the highest resolution (level 0) use a 1×1 conv when dims differ.
+        # At the highest resolution (level 0) use a 1x1 conv when dims differ.
         conv0 = (
             nn.Conv2d(self.dims_encoder[0], dim_decoder, kernel_size=1, bias=False)
             if self.dims_encoder[0] != dim_decoder
@@ -186,7 +186,7 @@ class MultiresConvDecoder(nn.Module):
         """Decode a list of multi-resolution feature maps.
 
         Args:
-            encodings: Feature maps ordered finest → coarsest, each of shape
+            encodings: Feature maps ordered finest -> coarsest, each of shape
                 ``(B, C_i, H_i, W_i)``.
 
         Returns:

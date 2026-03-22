@@ -27,7 +27,7 @@ from unicv.utils.types import InputForm, Modality
 class DepthPro(nn.Module):
     """DepthPro network (raw PyTorch module).
 
-    Multi-scale patch-pyramid encoder → multi-resolution conv decoder →
+    Multi-scale patch-pyramid encoder -> multi-resolution conv decoder ->
     depth head (+ optional FoV head).
     """
 
@@ -123,7 +123,7 @@ class DepthPro(nn.Module):
         return self.encoder.img_size
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Run the encoder–decoder and return inverse depth + optional FOV.
+        """Run the encoder--decoder and return inverse depth + optional FOV.
 
         Args:
             x: Input image tensor, shape ``(B, 3, H, W)`` where
@@ -161,7 +161,7 @@ class DepthPro(nn.Module):
         """Infer metric depth and focal length for an input image.
 
         If the image is not at network resolution it is resized to
-        ``(img_size × img_size)`` and the estimated depth is resized back.
+        ``(img_size x img_size)`` and the estimated depth is resized back.
 
         Args:
             x: Input image tensor, shape ``(B, 3, H, W)`` or ``(3, H, W)``.

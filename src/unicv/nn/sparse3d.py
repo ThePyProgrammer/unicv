@@ -5,9 +5,9 @@ which are required by voxel-based models such as TRELLIS.2.
 
 Two backends are supported, tried in order:
 
-1. **spconv** (``pip install spconv-cuXXX``) — fast CUDA sparse convolutions
+1. **spconv** (``pip install spconv-cuXXX``) -- fast CUDA sparse convolutions
    used by many PointPillars / CenterPoint-style detectors.
-2. **MinkowskiEngine** (``pip install MinkowskiEngine``) — a general sparse
+2. **MinkowskiEngine** (``pip install MinkowskiEngine``) -- a general sparse
    tensor library well-suited for 3-D reconstruction tasks.
 
 If neither backend is installed, :class:`SparseConv3d` raises
@@ -29,7 +29,7 @@ import torch.nn as nn
 
 
 # ---------------------------------------------------------------------------
-# Backend detection (lazy — checked once at import time)
+# Backend detection (lazy -- checked once at import time)
 # ---------------------------------------------------------------------------
 
 def _detect_backend() -> str | None:
@@ -170,7 +170,7 @@ def devoxelize(
 
 
 # ---------------------------------------------------------------------------
-# SparseConv3d — backend-dispatching sparse convolution
+# SparseConv3d -- backend-dispatching sparse convolution
 # ---------------------------------------------------------------------------
 
 class SparseConv3d(nn.Module):

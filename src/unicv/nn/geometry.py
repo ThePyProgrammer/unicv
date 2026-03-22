@@ -2,9 +2,9 @@
 
 Provides two fundamental operations needed by cost-volume and splat models:
 
-* :func:`backproject_depth` — lifts a depth map to a 3-D point cloud in camera
+* :func:`backproject_depth` -- lifts a depth map to a 3-D point cloud in camera
   coordinates, given a pinhole camera intrinsics matrix.
-* :func:`homography_warp` — warps a source feature map into the reference view
+* :func:`homography_warp` -- warps a source feature map into the reference view
   at a specified fronto-parallel depth plane, using the homography induced by
   the relative camera pose.  This is the core primitive for plane-sweep stereo.
 
@@ -105,8 +105,8 @@ def homography_warp(
                          Shape ``(B, 3, 3)`` or ``(3, 3)``.
         src_intrinsics:  Source camera intrinsics ``K_src``.
                          Shape ``(B, 3, 3)`` or ``(3, 3)``.
-        ref_to_src:      4×4 rigid transform from reference to source camera
-                         coordinates ``T_{src←ref}``.  Shape ``(B, 4, 4)``.
+        ref_to_src:      4x4 rigid transform from reference to source camera
+                         coordinates ``T_{src<-ref}``.  Shape ``(B, 4, 4)``.
 
     Returns:
         Warped source feature map in the reference view.
@@ -127,7 +127,7 @@ def homography_warp(
     R = ref_to_src[:, :3, :3].to(dtype)     # (B, 3, 3)
     t = ref_to_src[:, :3, 3:4].to(dtype)    # (B, 3, 1)
 
-    # Scalar depth → (B, 1, 1) for broadcasting.
+    # Scalar depth -> (B, 1, 1) for broadcasting.
     if isinstance(depth_plane, torch.Tensor):
         d = depth_plane.to(dtype=dtype, device=device).reshape(B, 1, 1)
     else:
@@ -158,7 +158,7 @@ def homography_warp(
     )                                                                      # (H*W, 3)
     coords_ref = coords_ref.unsqueeze(0).expand(B, -1, -1)                # (B, H*W, 3)
 
-    # Apply homography: (B, 3, 3) × (B, 3, N) → (B, 3, N) → (B, N, 3).
+    # Apply homography: (B, 3, 3) x (B, 3, N) -> (B, 3, N) -> (B, N, 3).
     coords_src = torch.bmm(
         Hmat, coords_ref.permute(0, 2, 1)
     ).permute(0, 2, 1)                                                     # (B, H*W, 3)

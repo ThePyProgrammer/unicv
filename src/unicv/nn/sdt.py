@@ -72,7 +72,7 @@ class _LevelProjector(nn.Module):
 
 
 class _ConvFuse(nn.Module):
-    """1×1 conv followed by 3×3 depth-wise conv for level fusion."""
+    """1x1 conv followed by 3x3 depth-wise conv for level fusion."""
 
     def __init__(self, in_ch: int, out_ch: int):
         super().__init__()
@@ -95,7 +95,7 @@ class SDTHead(nn.Module):
 
     Compared to the DPT decoder this head:
     - Uses a single attention layer per level (not full transformer blocks).
-    - Fuses levels with lightweight 1×1 + depth-wise 3×3 convolutions.
+    - Fuses levels with lightweight 1x1 + depth-wise 3x3 convolutions.
     - Has ~60 % fewer parameters for the same ``decoder_dim``.
     """
 
@@ -139,7 +139,7 @@ class SDTHead(nn.Module):
             for i in range(num_levels)
         ])
 
-        # Final prediction head (×4 upsample → input resolution / patch_size → full res).
+        # Final prediction head (x4 upsample -> input resolution / patch_size -> full res).
         self.head = nn.Sequential(
             nn.Conv2d(decoder_dim, decoder_dim // 2, kernel_size=3, stride=1, padding=1),
             nn.GELU(),
@@ -157,7 +157,7 @@ class SDTHead(nn.Module):
         Args:
             hidden_states: List of ``num_levels`` tensors each of shape
                 ``(B, 1 + num_register_tokens + N, D)``, ordered
-                shallower → deeper.
+                shallower -> deeper.
 
         Returns:
             Predicted depth / inverse-depth map at the input resolution,
@@ -168,13 +168,13 @@ class SDTHead(nn.Module):
                 f"Expected {self.num_levels} hidden states, got {len(hidden_states)}"
             )
 
-        # Step 1 – project each level to a spatial feature map.
+        # Step 1 -- project each level to a spatial feature map.
         spatial: list[torch.Tensor] = [
             proj(h, self.num_register_tokens)
             for proj, h in zip(self.level_projectors, hidden_states)
         ]
 
-        # Step 2 – fuse from coarsest to finest.
+        # Step 2 -- fuse from coarsest to finest.
         # Coarsest level (last) is upsampled to the next level's size, then
         # concatenated and fused.
         x = self.fuse_blocks[-1](spatial[-1])

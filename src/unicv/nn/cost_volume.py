@@ -89,7 +89,7 @@ class PlaneSweepCostVolume(nn.Module):
         src_feats_list:       List of source feature maps.  Each ``(B, C, H, W)``.
         ref_intrinsics:       Reference camera intrinsics.  ``(B, 3, 3)``.
         src_intrinsics_list:  List of source intrinsics.  Each ``(B, 3, 3)``.
-        ref_to_src_list:      List of ``T_{src←ref}`` transforms.  Each ``(B, 4, 4)``.
+        ref_to_src_list:      List of ``T_{src<-ref}`` transforms.  Each ``(B, 4, 4)``.
 
     Forward returns:
         Cost volume ``(B, D, H, W)`` where higher values indicate better

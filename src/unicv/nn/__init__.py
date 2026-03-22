@@ -1,4 +1,4 @@
-"""unicv.nn – neural network building blocks for computer vision models."""
+"""unicv.nn -- neural network building blocks for computer vision models."""
 
 from unicv.nn.cost_volume import PlaneSweepCostVolume
 from unicv.nn.decoder import FeatureFusionBlock2d, MultiresConvDecoder, ResidualBlock

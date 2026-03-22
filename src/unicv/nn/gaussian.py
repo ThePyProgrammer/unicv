@@ -25,7 +25,7 @@ from unicv.utils.structs import GaussianCloud
 class GaussianHead(nn.Module):
     """Per-pixel Gaussian parameter regression head.
 
-    Applies a set of independent 1×1 convolutions to a dense feature map and
+    Applies a set of independent 1x1 convolutions to a dense feature map and
     returns a :class:`GaussianCloud` where each spatial position of the input
     corresponds to one Gaussian.
 
@@ -69,7 +69,7 @@ class GaussianHead(nn.Module):
             features: Dense feature map, shape ``(B, C, H, W)``.
 
         Returns:
-            A :class:`GaussianCloud` with ``N = H × W`` Gaussians per image.
+            A :class:`GaussianCloud` with ``N = H x W`` Gaussians per image.
             All leading batch dimensions are preserved; tensor shapes are
             ``(B, N, ...)``.
         """
@@ -77,7 +77,7 @@ class GaussianHead(nn.Module):
         N = H * W
 
         def _flat(t: torch.Tensor) -> torch.Tensor:
-            """Conv output (B, k, H, W) → (B, N, k)."""
+            """Conv output (B, k, H, W) -> (B, N, k)."""
             return t.flatten(start_dim=2).permute(0, 2, 1)
 
         xyz       = _flat(self.xyz_head(features))       # (B, N, 3)
