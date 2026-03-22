@@ -2,10 +2,11 @@
 
 from unicv.nn.cost_volume import PlaneSweepCostVolume
 from unicv.nn.decoder import FeatureFusionBlock2d, MultiresConvDecoder, ResidualBlock
+from unicv.nn.dinov2 import DINOv2Backbone
 from unicv.nn.dpt import DPTDecoder, FeatureFusionBlock, Reassemble, ResidualConvUnit
 from unicv.nn.fov import FOVNetwork
 from unicv.nn.gaussian import GaussianHead
-from unicv.nn.geometry import backproject_depth, homography_warp
+from unicv.nn.geometry import backproject_depth, default_intrinsics, homography_warp
 from unicv.nn.sdt import SDTHead
 from unicv.nn.sparse3d import (
     SPARSE3D_BACKEND_AVAILABLE,
@@ -16,6 +17,8 @@ from unicv.nn.sparse3d import (
 )
 
 __all__ = [
+    # DINOv2 backbone
+    "DINOv2Backbone",
     # DPT decoder components
     "DPTDecoder",
     "FeatureFusionBlock",
@@ -33,6 +36,7 @@ __all__ = [
     "GaussianHead",
     # Camera-geometry utilities
     "backproject_depth",
+    "default_intrinsics",
     "homography_warp",
     # Plane-sweep cost volume
     "PlaneSweepCostVolume",

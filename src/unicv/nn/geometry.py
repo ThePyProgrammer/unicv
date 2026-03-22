@@ -182,4 +182,30 @@ def homography_warp(
     )
 
 
-__all__ = ["backproject_depth", "homography_warp"]
+def default_intrinsics(
+    B: int, H: int, W: int, device: torch.device
+) -> torch.Tensor:
+    """Build a plausible pinhole intrinsics matrix from image dimensions.
+
+    Focal length is set to ``max(H, W)`` and the principal point is at the
+    image centre.
+
+    Args:
+        B: Batch size.
+        H: Image height.
+        W: Image width.
+        device: Torch device for the output tensor.
+
+    Returns:
+        Intrinsics matrix, shape ``(B, 3, 3)``.
+    """
+    K = torch.eye(3, device=device).unsqueeze(0).expand(B, -1, -1).clone()
+    f = float(max(H, W))
+    K[:, 0, 0] = f
+    K[:, 1, 1] = f
+    K[:, 0, 2] = W / 2.0
+    K[:, 1, 2] = H / 2.0
+    return K
+
+
+__all__ = ["backproject_depth", "default_intrinsics", "homography_warp"]
