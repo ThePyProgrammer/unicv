@@ -6,6 +6,8 @@ hidden states for use by downstream decoders (DPT, SDT, etc.).
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import torch
 import torch.nn as nn
 
@@ -52,6 +54,10 @@ class DINOv2Backbone(nn.Module):
         """
         super().__init__()
 
+        if variant not in self._HUB_NAMES:
+            raise ValueError(
+                f"variant must be one of {list(self._HUB_NAMES)}, got {variant!r}"
+            )
         hub_name = self._HUB_NAMES[variant]
         self.embed_dim: int = self._EMBED_DIMS[variant]
         self.num_register_tokens = num_register_tokens
@@ -81,7 +87,7 @@ class DINOv2Backbone(nn.Module):
                 self._make_hook(layer_id)
             )
 
-    def _make_hook(self, layer_id: int) -> callable:
+    def _make_hook(self, layer_id: int) -> Callable:
         def _hook(module: nn.Module, input: tuple, output: torch.Tensor) -> None:
             self._features[layer_id] = output
         return _hook
