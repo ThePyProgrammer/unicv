@@ -238,8 +238,27 @@ class DepthProModel(VisionModule):
 
     def forward(self, **inputs: Any) -> dict[Modality, Any]:
         rgb: torch.Tensor = inputs[Modality.RGB.value]
-        result = self.net.infer(rgb)
-        return {Modality.DEPTH: result["depth"]}
+        _, _, H, W = rgb.shape
+        img_size = self.net.img_size
+
+        # Resize to network resolution if needed (same as sibling wrappers).
+        if H != img_size or W != img_size:
+            rgb = F.interpolate(
+                rgb, size=(img_size, img_size),
+                mode="bilinear", align_corners=False,
+            )
+
+        canonical_inverse_depth, _ = self.net(rgb)
+        depth = 1.0 / torch.clamp(canonical_inverse_depth, min=1e-4, max=1e4)
+
+        # Resize output back to original resolution.
+        if depth.shape[-2:] != (H, W):
+            depth = F.interpolate(
+                depth, size=(H, W),
+                mode="bilinear", align_corners=False,
+            )
+
+        return {Modality.DEPTH: depth}
 
     @classmethod
     def from_pretrained(
