@@ -7,6 +7,7 @@ from unicv.nn.dpt import DPTDecoder, FeatureFusionBlock, Reassemble, ResidualCon
 from unicv.nn.fov import FOVNetwork
 from unicv.nn.gaussian import GaussianHead
 from unicv.nn.geometry import backproject_depth, default_intrinsics, homography_warp
+from unicv.nn.gsdpt import GSDPT
 from unicv.nn.sdt import SDTHead
 from unicv.nn.sparse3d import (
     SPARSE3D_BACKEND_AVAILABLE,
@@ -34,6 +35,7 @@ __all__ = [
     "SDTHead",
     # Gaussian splat head
     "GaussianHead",
+    "GSDPT",
     # Camera-geometry utilities
     "backproject_depth",
     "default_intrinsics",

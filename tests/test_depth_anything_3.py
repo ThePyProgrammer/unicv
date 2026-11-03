@@ -11,6 +11,7 @@ from unicv.models.depth_anything_3.model import (
     DINOv2Backbone,
 )
 from unicv.nn.dpt import DPTDecoder
+from unicv.nn.gsdpt import GSDPT
 from unicv.utils.types import Modality
 
 
@@ -45,10 +46,10 @@ class _MockBackbone(nn.Module):
         self._patch_size = patch_size
 
     def forward(self, x: torch.Tensor) -> list[torch.Tensor]:
-        B = x.shape[0]
+        batch_shape = x.shape[:2] if x.ndim == 5 else x.shape[:1]
         N = (self._img_size // self._patch_size) ** 2  # patch tokens
         # Each hidden state: [CLS, ...N patches...]
-        return [torch.zeros(B, 1 + N, self.embed_dim) for _ in range(4)]
+        return [torch.zeros(*batch_shape, 1 + N, self.embed_dim) for _ in range(4)]
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +76,42 @@ def test_dinov2_backbone_small_variant():
         backbone = DINOv2Backbone(variant="vit_s", pretrained=False)
 
     assert backbone.embed_dim == 384
+
+
+def test_dinov2_backbone_camera_token_and_cross_view_attention():
+    class _MeanBlock(nn.Module):
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return x + x.mean(dim=1, keepdim=True)
+
+    class _CrossViewDINO(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.blocks = nn.ModuleList([_MeanBlock(), _MeanBlock()])
+
+        def prepare_tokens_with_masks(self, x: torch.Tensor) -> torch.Tensor:
+            value = x.mean(dim=(1, 2, 3), keepdim=False)[:, None, None]
+            return value.expand(-1, 2, 1024).clone()
+
+    fake_dinov2 = _CrossViewDINO()
+    with patch("torch.hub.load", return_value=fake_dinov2):
+        backbone = DINOv2Backbone(
+            variant="vit_l",
+            pretrained=False,
+            hook_layer_ids=[1],
+            alt_start=1,
+        )
+
+    assert backbone.model.camera_token.shape == (1, 2, 1024)
+    images = torch.stack(
+        (torch.zeros(3, 8, 8), torch.ones(3, 8, 8)), dim=0
+    ).unsqueeze(0)
+    together = backbone(images)[0]
+    changed_second_view = images.clone()
+    changed_second_view[:, 1] = 3
+    changed = backbone(changed_second_view)[0]
+
+    assert together.shape == (1, 2, 2, 2048)
+    assert not torch.allclose(together[:, 0], changed[:, 0])
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +174,20 @@ def test_depth_anything3_from_config():
     assert isinstance(model, DepthAnything3)
     assert isinstance(model.backbone, DINOv2Backbone)
     assert isinstance(model.decoder, DPTDecoder)
+    assert model.backbone.alt_start == 6
+    assert model.decoder.reassemble_blocks[0].project.in_channels == 768
+
+
+def test_vit_g_from_config_includes_gaussian_head():
+    fake_dinov2 = _make_mock_dinov2(num_blocks=12)
+    with patch("torch.hub.load", return_value=fake_dinov2):
+        model = DepthAnything3.from_config(
+            variant="vit_g",
+            img_size=64,
+            features=32,
+            pretrained=False,
+        )
+    assert isinstance(model.gaussian_decoder, GSDPT)
 
 
 # ---------------------------------------------------------------------------
@@ -176,3 +227,29 @@ def test_depth_anything3_model_forward():
     result = wrapper(rgb=torch.zeros(2, 3, 64, 64))
     assert Modality.DEPTH in result
     assert result[Modality.DEPTH].shape[0] == 2
+
+
+def test_depth_anything3_multiview_and_gaussian_forward():
+    backbone = _MockBackbone(img_size=64, patch_size=16)
+    decoder = DPTDecoder(
+        embed_dim=256,
+        features=32,
+        num_layers=4,
+        patch_size=16,
+        img_size=64,
+        out_channels=1,
+    )
+    gaussian_decoder = GSDPT(
+        embed_dim=256,
+        features=32,
+        num_layers=4,
+        patch_size=16,
+        img_size=64,
+        sh_degree=0,
+    )
+    model = DepthAnything3(backbone, decoder, gaussian_decoder).eval()
+    images = torch.zeros(1, 2, 3, 64, 64)
+    prediction = model(images, predict_gaussians=True)
+
+    assert prediction[Modality.DEPTH].shape == (1, 2, 1, 64, 64)
+    assert prediction[Modality.SPLAT].xyz.shape == (1, 2, 64 * 64, 3)
