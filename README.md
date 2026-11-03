@@ -68,7 +68,7 @@ Every model follows the same interface — only `input_spec` and `output_modalit
 | Model | Paper | Input → Output | Pretrained |
 |-------|-------|----------------|------------|
 | [DepthPro](https://github.com/apple/ml-depth-pro) | Apple, 2024 | RGB → Depth | `DepthProModel.from_pretrained()` |
-| [Depth Anything 3](https://depth-anything-3.github.io/) | ByteDance, 2025 | RGB → Depth | `DepthAnything3Model.from_pretrained(variant=...)` |
+| [Depth Anything 3](https://depth-anything-3.github.io/) | ByteDance, 2025 | RGB / multi-view → Depth, optional Splat (`vit_g`) | `DepthAnything3Model.from_pretrained(variant=...)` |
 | [Camera Depth Model](https://manipulation-as-in-simulation.github.io/#cdm-results) | ByteDance, 2025 | RGB + Depth → Depth | `CameraDepthModel.from_pretrained(camera=...)` |
 | [SHARP](https://apple.github.io/ml-sharp/) | Apple, 2024 | RGB → Splat | `SHARPModel.from_pretrained()` |
 | [SimpleRecon](https://nianticlabs.github.io/simplerecon/) | Niantic, 2022 | RGB (temporal) → Depth | -- |
@@ -87,6 +87,7 @@ See the [full model catalogue](https://thepyprogrammer.github.io/unicv/models/ca
 | [VisionModule Interface](https://thepyprogrammer.github.io/unicv/vision-module/) | The core abstraction in detail |
 | [Building Blocks](https://thepyprogrammer.github.io/unicv/nn/overview/) | Shared decoders, heads, geometry utilities |
 | [Architecture](ARCHITECTURE.md) | High-level codebase map |
+| [Changelog](CHANGELOG.md) | Release notes |
 | **Model Guides** | |
 | [DepthPro](https://thepyprogrammer.github.io/unicv/models/depth-pro/) | Multi-scale patch-pyramid encoder walkthrough |
 | [Depth Anything 3](https://thepyprogrammer.github.io/unicv/models/depth-anything-3/) | DINOv2 + DPT decoder walkthrough |

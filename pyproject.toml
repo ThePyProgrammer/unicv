@@ -1,6 +1,6 @@
 [project]
 name = "unicv"
-version = "1.0.0"
+version = "1.0.1"
 description = "Unified deep learning models for Computer Vision"
 readme = "README.md"
 authors = [{ name = "Prannaya Gupta", email = "prannayagupta@gmail.com" }]

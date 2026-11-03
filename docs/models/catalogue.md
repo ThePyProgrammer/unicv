@@ -5,7 +5,7 @@
 | Model | Paper | Class | Input → Output | Pretrained |
 |-------|-------|-------|----------------|------------|
 | [DepthPro](https://github.com/apple/ml-depth-pro) | Apple, 2024 | `DepthProModel` | RGB → Depth | `DepthProModel.from_pretrained()` |
-| [Depth Anything 3](https://depth-anything-3.github.io/) | ByteDance, 2025 | `DepthAnything3Model` | RGB → Depth | `DepthAnything3Model.from_pretrained(variant=...)` |
+| [Depth Anything 3](https://depth-anything-3.github.io/) | ByteDance, 2025 | `DepthAnything3Model` | RGB / multi-view → Depth, optional Splat (`vit_g`) | `DepthAnything3Model.from_pretrained(variant=...)` |
 | [Camera Depth Model](https://manipulation-as-in-simulation.github.io/#cdm-results) | ByteDance, 2025 | `CameraDepthModel` | RGB + Depth → Depth | `CameraDepthModel.from_pretrained(camera=...)` |
 | [SHARP](https://apple.github.io/ml-sharp/) | Apple, 2024 | `SHARPModel` | RGB → Splat | `SHARPModel.from_pretrained()` |
 | [SimpleRecon](https://nianticlabs.github.io/simplerecon/) | Niantic, 2022 | `SimpleReconModel` | RGB (temporal) → Depth | -- |
@@ -40,7 +40,7 @@
 | Model | Input | Form | Output |
 |-------|-------|------|--------|
 | DepthPro | RGB | Single | Depth |
-| Depth Anything 3 | RGB | Single | Depth |
+| Depth Anything 3 | RGB | Single / multi-view | Depth, optional Splat (`vit_g`) |
 | Camera Depth Model | RGB + Depth | Single | Depth |
 | SimpleRecon | RGB | Temporal | Depth |
 | SHARP | RGB | Single | Splat |
