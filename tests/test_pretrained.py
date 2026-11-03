@@ -176,7 +176,8 @@ def _da3_sd(variant: str = "vit_l") -> dict[str, torch.Tensor]:
         "pretrained.norm.weight": torch.ones(D),
         "pretrained.norm.bias":   torch.zeros(D),
         # reassemble project (index 0) — out_channels must match features=256
-        "depth_head.projects.0.weight": torch.zeros(F, D, 1, 1),
+        "pretrained.camera_token": torch.zeros(1, 2, D),
+        "depth_head.projects.0.weight": torch.zeros(F, D * 2, 1, 1),
         "depth_head.projects.0.bias":   torch.zeros(F),
         # fusion block (refinenet4 → fusion_blocks[0])
         "depth_head.scratch.refinenet4.resConfUnit1.conv1.weight": torch.zeros(F, F, 3, 3),
@@ -280,7 +281,7 @@ class TestDepthAnything3FromPretrained:
 
     def test_reassemble_project_remapping(self):
         """depth_head.projects.0.bias → decoder.reassemble_blocks[0].project.bias."""
-        sd    = {"depth_head.projects.0.weight": torch.zeros(256, 1024, 1, 1),
+        sd    = {"depth_head.projects.0.weight": torch.zeros(256, 2048, 1, 1),
                  "depth_head.projects.0.bias":   torch.full((256,), 5.0)}
         model = self._run("vit_l", sd=sd)
         assert torch.all(model.net.decoder.reassemble_blocks[0].project.bias == 5.0)

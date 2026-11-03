@@ -6,12 +6,14 @@ Based on:
 
 Architecture
 ------------
-- **Backbone**: DINOv2 (ViT-L/14) loaded via ``torch.hub``.  The backbone
-  exposes 4 intermediate hidden states for use by the decoder.
+- **Backbone**: DINOv2 (ViT-L/14) loaded via ``torch.hub``. The DA3
+  configuration alternates per-view and cross-view attention using camera tokens.
 - **Decoder**: ``DPTDecoder`` from ``unicv.nn.dpt`` -- reassembles patch tokens
   into multi-scale spatial maps and progressively fuses them to full resolution.
+- **Gaussian head**: Optional image-conditioned ``GSDPT`` branch, enabled by
+  default for ``vit_g``.
 - **VisionModule wrapper**: ``DepthAnything3Model`` implements the standard
-  ``VisionModule`` interface (RGB-in -> DEPTH-out).
+  ``VisionModule`` interface (RGB-in -> DEPTH, optionally SPLAT).
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ import torch.nn.functional as F
 from unicv.models.base import VisionModule, _remap_checkpoint, _require_package, _warn_missing_keys
 from unicv.nn.dinov2 import DINOv2Backbone
 from unicv.nn.dpt import DPTDecoder
+from unicv.nn.gsdpt import GSDPT
 from unicv.utils.types import InputForm, Modality
 
 
@@ -35,24 +38,27 @@ from unicv.utils.types import InputForm, Modality
 class DepthAnything3(nn.Module):
     """Depth Anything 3 depth estimation network.
 
-    Combines a DINOv2 backbone with a DPT decoder to produce a monocular
-    depth/inverse-depth map at the input image resolution.
+    Combines a cross-view DINOv2 backbone with a DPT decoder to predict a depth
+    map for each input view, with an optional Gaussian splat decoder.
     """
 
     def __init__(
         self,
         backbone: DINOv2Backbone,
         decoder: DPTDecoder,
+        gaussian_decoder: GSDPT | None = None,
     ):
         """Initialise DepthAnything3.
 
         Args:
             backbone: A ``DINOv2Backbone`` instance.
             decoder: A ``DPTDecoder`` instance.
+            gaussian_decoder: Optional image-conditioned GSDPT branch.
         """
         super().__init__()
         self.backbone = backbone
         self.decoder = decoder
+        self.gaussian_decoder = gaussian_decoder
 
     @classmethod
     def from_config(
@@ -63,6 +69,9 @@ class DepthAnything3(nn.Module):
         patch_size: int = 14,
         pretrained: bool = True,
         num_register_tokens: int = 0,
+        alt_start: int | None = None,
+        include_gaussian_head: bool | None = None,
+        sh_degree: int = 3,
     ) -> "DepthAnything3":
         """Convenience factory to build the model from high-level settings.
 
@@ -73,6 +82,11 @@ class DepthAnything3(nn.Module):
             patch_size: ViT patch size (14 for all DINOv2 variants).
             pretrained: Load pretrained DINOv2 weights.
             num_register_tokens: Register tokens (0 for standard DINOv2).
+            alt_start: First cross-view attention layer. Defaults to the
+                transformer midpoint; pass ``-1`` to disable cross-view attention.
+            include_gaussian_head: Add the GSDPT branch. Defaults to enabled
+                for ``vit_g``.
+            sh_degree: Spherical-harmonic degree for Gaussian colour.
 
         Returns:
             An initialised ``DepthAnything3`` model.
@@ -82,7 +96,13 @@ class DepthAnything3(nn.Module):
             pretrained=pretrained,
             num_register_tokens=num_register_tokens,
         )
-        embed_dim = backbone.embed_dim
+        if alt_start is None:
+            alt_start = len(backbone.model.blocks) // 2
+        if alt_start != -1:
+            backbone.enable_cross_view_attention(alt_start)
+        embed_dim = backbone.embed_dim * (
+            2 if backbone.cat_token and backbone.alt_start != -1 else 1
+        )
 
         decoder = DPTDecoder(
             embed_dim=embed_dim,
@@ -93,25 +113,78 @@ class DepthAnything3(nn.Module):
             num_register_tokens=num_register_tokens,
             out_channels=1,
         )
-        return cls(backbone=backbone, decoder=decoder)
+        if include_gaussian_head is None:
+            include_gaussian_head = variant == "vit_g"
+        gaussian_decoder = (
+            GSDPT(
+                embed_dim=embed_dim,
+                features=features,
+                num_layers=len(backbone.hook_layer_ids),
+                patch_size=patch_size,
+                img_size=img_size,
+                num_register_tokens=num_register_tokens,
+                sh_degree=sh_degree,
+            )
+            if include_gaussian_head
+            else None
+        )
+        return cls(
+            backbone=backbone,
+            decoder=decoder,
+            gaussian_decoder=gaussian_decoder,
+        )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Predict a depth map.
+    def forward(
+        self,
+        x: torch.Tensor,
+        *,
+        predict_gaussians: bool = False,
+    ) -> torch.Tensor | dict[Modality, Any]:
+        """Predict depth, and optionally per-view Gaussian splats.
 
         Args:
-            x: Input image tensor, shape ``(B, 3, H, W)``.
+            x: RGB image ``(B, 3, H, W)`` or view set ``(B, S, 3, H, W)``.
+            predict_gaussians: Run GSDPT and return depth plus a GaussianCloud.
 
         Returns:
-            Predicted depth map, shape ``(B, 1, H, W)``.
+            A depth tensor, or a modality-keyed depth/splat dictionary when
+            ``predict_gaussians`` is true.
         """
+        if x.ndim not in (4, 5):
+            raise ValueError(
+                f"Expected RGB shaped (B, 3, H, W) or (B, S, 3, H, W), got {tuple(x.shape)}"
+            )
+        if predict_gaussians and self.gaussian_decoder is None:
+            raise ValueError("This DepthAnything3 model has no GSDPT Gaussian head")
+
         hidden_states = self.backbone(x)
-        depth = self.decoder(hidden_states)
+        if x.ndim == 5:
+            batch, views = x.shape[:2]
+            flat_states = [
+                state.reshape(batch * views, *state.shape[2:])
+                for state in hidden_states
+            ]
+        else:
+            flat_states = hidden_states
+        depth = self.decoder(flat_states)
 
         # Resize to input resolution if needed.
         if depth.shape[-2:] != x.shape[-2:]:
-            depth = F.interpolate(depth, size=x.shape[-2:], mode="bilinear", align_corners=True)
+            depth = F.interpolate(
+                depth,
+                size=x.shape[-2:],
+                mode="bilinear",
+                align_corners=True,
+            )
 
-        return depth
+        if x.ndim == 5:
+            depth = depth.reshape(batch, views, *depth.shape[1:])
+        if not predict_gaussians:
+            return depth
+
+        assert self.gaussian_decoder is not None
+        cloud = self.gaussian_decoder(hidden_states, x)
+        return {Modality.DEPTH: depth, Modality.SPLAT: cloud}
 
 
 # ---------------------------------------------------------------------------
@@ -122,14 +195,16 @@ class DepthAnything3Model(VisionModule):
     """UniCV ``VisionModule`` wrapper around ``DepthAnything3``.
 
     Inputs:
-        rgb (Modality.RGB, InputForm.SINGLE): RGB image tensor ``(B, 3, H, W)``.
+        rgb (Modality.RGB, InputForm.SINGLE): RGB image ``(B, 3, H, W)`` or
+            multi-view tensor ``(B, S, 3, H, W)``.
 
     Outputs:
-        Modality.DEPTH: Predicted depth / inverse-depth map.
+        Modality.DEPTH: Predicted per-view depth map(s).
+        Modality.SPLAT: Per-view GaussianCloud, when GSDPT is configured.
     """
 
     input_spec: dict[Modality, InputForm] = {Modality.RGB: InputForm.SINGLE}
-    output_modalities: list[Modality] = [Modality.DEPTH]
+    output_modalities: list[Modality] = [Modality.DEPTH, Modality.SPLAT]
 
     def __init__(self, net: DepthAnything3):
         super().__init__()
@@ -137,8 +212,13 @@ class DepthAnything3Model(VisionModule):
 
     def forward(self, **inputs: Any) -> dict[Modality, Any]:
         rgb: torch.Tensor = inputs[Modality.RGB.value]
-        depth = self.net(rgb)
-        return {Modality.DEPTH: depth}
+        prediction = self.net(
+            rgb,
+            predict_gaussians=self.net.gaussian_decoder is not None,
+        )
+        if isinstance(prediction, dict):
+            return prediction
+        return {Modality.DEPTH: prediction}
 
     @classmethod
     def from_pretrained(
