@@ -282,6 +282,10 @@ class DPTDecoder(nn.Module):
         Returns:
             Dense prediction map; shape depends on head configuration.
         """
+        return self.head(self.forward_features(hidden_states))
+
+    def forward_features(self, hidden_states: list[torch.Tensor]) -> torch.Tensor:
+        """Decode multi-scale hidden states into the full-resolution feature map."""
         if len(hidden_states) != len(self.reassemble_blocks):
             raise ValueError(
                 f"Expected {len(self.reassemble_blocks)} hidden states, "
@@ -296,7 +300,7 @@ class DPTDecoder(nn.Module):
         for i in range(len(features) - 2, -1, -1):
             x = self.fusion_blocks[i](x, features[i])
 
-        return self.head(x)
+        return x
 
 
 __all__ = [
